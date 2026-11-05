@@ -11,7 +11,7 @@ Run this task in the freshly extracted `developer-digital-twin` repository. Do n
 3. `docker compose up -d`; check Qdrant REST and local Ollama models.
 4. Run API `http://127.0.0.1:5000` and inspect React.
 5. Test imported ZIP followed by fresh `dotnet build` (critical regression).
-6. Connect one **allowlisted** real Windows folder (no source copying).
+6. Connect a folder under `AllowedProjectRoots` directly, then request and approve a folder outside those roots in the Approval Center (no source copying).
 7. Embed two sample text files and search.
 8. Test chat and screenshots with configured OpenRouter key.
 9. Export Markdown, PDF, PowerPoint, SVG and PNG; inspect outputs in real programs.
@@ -21,6 +21,6 @@ Run this task in the freshly extracted `developer-digital-twin` repository. Do n
 
 - Any new cloud provider or model must be configurable and respect privacy boundaries.
 - No arbitrary shell command execution from tool calls.
-- No local-project path access without explicit `AllowedProjectRoots`.
+- Folders under `AllowedProjectRoots` keep direct access; any explicitly approved outside folder is limited to that folder and its descendants.
 - No model-generated code should be compiled as part of DeveloperTwin itself.
 - Keep frontend component files and backend service files distinct.

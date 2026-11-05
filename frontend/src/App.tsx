@@ -4,7 +4,7 @@ import Chat from './components/Chat';
 import Knowledge from './components/Knowledge';
 import Projects from './components/Projects';
 import Approvals from './components/Approvals';
-import { api, downloadReport, downloadDiagramPng, type ProviderStatus, type KnowledgeHealth, type Message, type Thread } from './lib/api';
+import { api, downloadReport, downloadDiagramPng, type ProviderStatus, type KnowledgeHealth, type Message, type Thread, type Approval, type FolderScanResult } from './lib/api';
 
 type View = 'chat' | 'knowledge' | 'projects' | 'approvals';
 type LogItem = { name: string; detail: string; time: number };
@@ -63,6 +63,8 @@ export default function App() {
   const [storageWarning, setStorageWarning] = useState('');
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [health, setHealth] = useState<KnowledgeHealth | null>(null);
+  const [approvalCount, setApprovalCount] = useState(0);
+  const [approvedProject, setApprovedProject] = useState<FolderScanResult | null>(null);
   const [rightVisible, setRightVisible] = useState(true);
   const [logs, setLogs] = useState<LogItem[]>([{ name:'Workspace ready', detail:'DeveloperTwin UI loaded', time: Date.now() }]);
   // Each conversation owns its request. Changing tab/thread never aborts it.
@@ -90,7 +92,16 @@ export default function App() {
     try { setStatus(await api<ProviderStatus>('/api/status')); } catch { setStatus(null); }
     try { setHealth(await api<KnowledgeHealth>('/api/knowledge/health')); } catch { setHealth(null); }
   };
+  const refreshApprovalCount = async () => {
+    try { setApprovalCount((await api<Approval[]>('/api/approvals')).length); }
+    catch (error) { console.warn('Approval count could not be refreshed:', error); }
+  };
   useEffect(() => { void refreshStatus(); }, []);
+  useEffect(() => {
+    void refreshApprovalCount();
+    const timer = window.setInterval(() => void refreshApprovalCount(), 15000);
+    return () => window.clearInterval(timer);
+  }, []);
   const updateMessages = (id:string, fn:(messages:Message[])=>Message[]) => setThreads(prev => {
     const prior = prev[id]; const messages = fn(prior?.messages || []);
     const revised = { ...prev, [id]: { title: prior?.title ?? messages[0]?.text.slice(0,55) ?? 'New conversation', created: prior?.created ?? Date.now(), messages } };
@@ -162,6 +173,7 @@ export default function App() {
       .catch(e=>window.alert(`Review request failed: ${(e as Error).message}`));
   };
   const askProject = (query:string) => { setDraft(query); setView('chat'); };
+  const openApprovedProject = (project: FolderScanResult) => { setApprovedProject(project); setView('projects'); };
   const threadEntries = Object.entries(threads).sort((a,b) => b[1].created - a[1].created);
   const menu: {id:View;label:string;icon:typeof Bot}[] = [
     {id:'chat',label:'Assistant',icon:Bot},{id:'knowledge',label:'Knowledge library',icon:BrainCircuit},
@@ -171,7 +183,7 @@ export default function App() {
     <aside className="sidebar"><div className="brand"><div className="brand-glyph">◇</div><div><strong>DeveloperTwin</strong><small>ENGINEERING AGENT</small></div></div>
       <button className="new-chat" onClick={() => openChat(newId())}><Plus size={18}/> New conversation <kbd>Ctrl K</kbd></button>
       <div className="menu-label">WORKSPACE</div>
-      <nav>{menu.map(item => <button key={item.id} className={`nav-link ${view===item.id?'active':''}`} onClick={()=>setView(item.id)}><item.icon size={18}/><span>{item.label}</span>{view===item.id&&<ChevronRight size={15}/>}</button>)}</nav>
+      <nav>{menu.map(item => <button key={item.id} className={`nav-link ${view===item.id?'active':''}`} onClick={()=>setView(item.id)}><item.icon size={18}/><span>{item.label}</span>{item.id==='approvals'&&approvalCount>0&&<b className="nav-badge" aria-label={`${approvalCount} pending approvals`}>{approvalCount}</b>}{view===item.id&&<ChevronRight size={15}/>}</button>)}</nav>
       <div className="history-header"><div className="menu-label history-label">RECENT CONVERSATIONS</div>
         {threadEntries.length>0 && <button className="clear-history" disabled={historyDeleting} onClick={() => void deleteAllThreads()}>Clear all</button>}</div>
       <div className="history-list">{threadEntries.map(([id, thread]) =>
@@ -186,7 +198,7 @@ export default function App() {
     </aside>
     <div className="main-frame"><header className="topbar"><div className="crumb">WORKSPACE <span>/</span> <strong>{menu.find(m=>m.id===view)?.label}</strong></div><div className="top-actions"><div className="provider-pill"><span className={status ? 'online':'offline'}/>{status?.provider?.toUpperCase() ?? 'OFFLINE'} · {status?.chatModel ?? 'Disconnected'}</div><button onClick={()=>setRightVisible(!rightVisible)} aria-label="Toggle activity panel" className="ghost icon-only">{rightVisible?<PanelRightClose size={18}/>:<PanelRightOpen size={18}/>}</button></div></header>
       <main className="main-area">{storageWarning && <div className="storage-warning" role="status">{storageWarning}<button type="button" onClick={() => setStorageWarning('')}>Dismiss</button></div>}{view==='chat' ? <Chat messages={threads[active]?.messages || []} busy={busy} onSend={send} onStop={stopActive} onExport={exportAnswer} onReview={requestReview} draft={draft} setDraft={setDraft}/>
-        : view==='knowledge' ? <Knowledge activity={activity}/> : view==='projects' ? <Projects activity={activity} onAsk={askProject}/> : <Approvals activity={activity}/>}</main>
+        : view==='knowledge' ? <Knowledge activity={activity}/> : view==='projects' ? <Projects activity={activity} onAsk={askProject} onApprovalRequested={() => void refreshApprovalCount()} openApprovals={() => setView('approvals')} initialProject={approvedProject}/> : <Approvals activity={activity} onProjectConnected={openApprovedProject} onQueueChanged={() => void refreshApprovalCount()}/>}</main>
     </div>
     <aside className="activity-panel"><div className="activity-heading"><Activity size={17}/><strong>Agent activity</strong></div><p className="small-muted">Your operations, model and service health.</p>
       <div className="timeline">{logs.map((log,i)=><div className="timeline-item" key={log.time+i}><div className="timeline-icon">{i===0?<Sparkles size={15}/>:<Activity size={15}/>}</div><div><strong>{log.name}</strong><small>{log.detail}</small><span>{new Date(log.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></div></div>)}</div>

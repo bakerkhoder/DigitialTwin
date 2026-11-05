@@ -70,11 +70,11 @@ flowchart TB
 ## Source-by-source reading order
 
 1. **`Program.cs`**: configuration, `IChatClient`, hosted agent registration with `WithAITool` and `WithInMemorySessionStore`; middleware, Minimal API routes.
-2. **`Models/TwinSettings.cs`**: typed, documented configuration. `AllowedProjectRoots` is a permission list; OpenRouter key comes from environment.
+2. **`Models/TwinSettings.cs`**: typed, documented configuration. Folders under `AllowedProjectRoots` connect directly; outside folders require Approval Center review and an explicit per-folder grant. OpenRouter key comes from environment.
 3. **`Agents/HostedFirstChatClient.cs`**: adapter that tries hosted chat first. Be transparent: fallback to local may not support the same tools or long context. Do not silently send confidential project material to cloud.
 4. **`Agents/SessionRegistry.cs`**: `ConcurrentDictionary` maps `sessionId` to `AgentSession`; `SemaphoreSlim` prevents simultaneous mutations to the same conversation. This is in-memory only.
 5. **`Services/WorkspaceTools.cs`**: safe path resolution, symlink blocking, file extensions, limited tree depth and read size.
-6. **`Services/ProjectCatalog.cs`**: controlled absolute folder paths from an explicit allowlist, persistent mapping to opaque linked IDs. No shell commands.
+6. **`Services/ProjectCatalog.cs`**: controlled absolute folder paths; configured roots connect directly, while explicitly approved outside folders are revalidated and persisted as narrowly scoped linked IDs. No shell commands.
 7. **`Services/ProjectImporter.cs`**: ZIP guardrails and extraction to inert data outside compilation.
 8. **`Services/KnowledgeStore.cs`**: local embeddings, Qdrant collection and query. The source/payload is the provenance mechanism.
 9. **`Services/VisionTools.cs`**: OpenRouter multimodal REST; no local vision model required.

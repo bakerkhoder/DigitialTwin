@@ -2,7 +2,7 @@
 
 # DeveloperTwin AI v4 — engineering agent (MAF + React)
 
-**Goal:** A teachable local-first engineering assistant. Inspect ZIP projects or explicitly approved folders, ask a hosted Microsoft Agent Framework agent to explain them, use a RAG knowledge base, and export useful technical handoffs as **Markdown, PDF, PPTX, SVG or PNG**. The approval demo gates handoff export (not Azure DevOps).
+**Goal:** A teachable local-first engineering assistant. Inspect ZIP projects or explicitly approved folders, ask a hosted Microsoft Agent Framework agent to explain them, use a RAG knowledge base, and export useful technical handoffs as **Markdown, PDF, PPTX, SVG or PNG**. The Approval Center gates folder scans and handoff exports (not Azure DevOps).
 
 > **Training sample, not production-ready.** The .NET and React build still needs to be verified on the user's Windows machine. Do not expose to a LAN/public endpoint or ingest unapproved confidential code into OpenRouter.
 
@@ -33,7 +33,7 @@ Open **http://127.0.0.1:5173**. `scripts/start-dev.ps1` is now a backward-compat
 ## 1. What changed from v3?
 
 - **Critical fix:** Runtime data now lives in `data/workspace/` outside `src/DigitalTwin.Api`; `.csproj` additionally excludes legacy `workspace/**/*.cs`. ZIP contents are never built with DeveloperTwin.
-- **Large local projects:** `POST /api/projects/connect` can link a directory by path, but only when its parent root is explicitly configured in `Twin:AllowedProjectRoots`. Read-only and no copying.
+- **Large local projects:** `POST /api/projects/connect` keeps direct connection for folders under `Twin:AllowedProjectRoots`. Folders outside those roots are queued for human review; approval grants read-only access only to that requested folder. No copying or upload.
 - **React 19 + TypeScript + Vite frontend:** chat, multi-attachments, loading, cancellation, knowledge with health checks, project scanning, and approvals. Backend routes remain ASP.NET Core Minimal APIs.
 - **Smaller C# classes:** `WorkspaceTools`, `ProjectImporter`, `ProjectCatalog`, `KnowledgeStore`, `VisionTools`, `WebSearchTools`, `ReportExporter`, `ApprovalQueue` are separate services; Minimal API endpoints are grouped by feature.
 - **Real report files:** `ReportExporter` generates PDF (QuestPDF), PowerPoint (OpenXML SDK), SVG vector diagram and Markdown. Agent writes report content; export logic uses deterministic code.
@@ -107,13 +107,13 @@ You can also inspect Qdrant at **http://127.0.0.1:6333/dashboard**. If it isn't 
 
 **ZIP workflow:** import a `.zip` up to 50 MB; `ProjectImporter` limits file count, uncompressed size, extensions, traversal, symlinks, and generated folders. Extracted files are under **`data/workspace/projects/project-...`**, NOT under `src/DigitalTwin.Api`.
 
-**Large project workflow (no ZIP):** edit `src/DigitalTwin.Api/appsettings.json`:
+**Large project workflow (no ZIP):** configure any pre-approved roots in `Twin:AllowedProjectRoots`:
 
 ```json
 "AllowedProjectRoots": ["E:\\MafTraining", "D:\\WorkProjects"]
 ```
 
-Restart backend, open **Projects & folders**, and enter an absolute path under one of these roots (e.g. `D:\WorkProjects\SomeApp`). A `linked-xxxxxxxxxx` ID is stored in `data/workspace/connected-projects.json`. The agent only gets that project ID, and the API resolves paths safely, read-only. The user's explicit allowlist is an authorization boundary; **do not approve your entire system drive**.
+Enter an absolute folder path in **Projects & folders**. Paths under an allowed root connect immediately as before. Paths outside all allowed roots appear in the **Approval Center**. Rejecting leaves the folder unconnected; approving revalidates and scans it, then grants read-only access only to that exact folder and its descendants. Its `linked-xxxxxxxxxx` ID is stored in `data/workspace/connected-projects.json`. Do not add broad roots such as an entire system drive.
 
 Existing v3 imported-project directories under `src/DigitalTwin.Api/workspace/` do **not** need to be copied; they will now be excluded from compilation. You can re-import them to the new workspace to make them visible to the v4 UI. Once backed up, remove the legacy directory to prevent confusion.
 

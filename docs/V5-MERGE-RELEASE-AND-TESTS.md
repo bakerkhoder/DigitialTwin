@@ -62,7 +62,7 @@ cd E:\MafTraining\developer-twin-v5-consolidated
 .\scripts\smoke-test-v5.ps1       # Terminal 4: actual API checks
 ```
 
-Use **port 5173** for normal frontend development; port 5000 serves the API. Set `AllowedProjectRoots` in `src/DigitalTwin.Api/appsettings.json` before connecting large local folders. Do not store keys in Git or commit your data/workspace, React built output, `bin`, `obj`, node_modules or real confidential documents.
+Use **port 5173** for normal frontend development; port 5000 serves the API. Folders under `AllowedProjectRoots` in `src/DigitalTwin.Api/appsettings.json` connect directly; outside folders require explicit Approval Center review and receive a folder-scoped grant. Do not store keys in Git or commit your data/workspace, React built output, `bin`, `obj`, node_modules or real confidential documents.
 
 ## Manual acceptance checks
 

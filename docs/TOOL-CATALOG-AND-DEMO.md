@@ -86,7 +86,7 @@ Located in `demo-knowledge/` (upload them with the Knowledge Library's multi-fil
 
 ### Important architecture boundary
 
-`05-data-classification-and-ai-use-policy.txt` is indexed as untrusted **reference knowledge**. Uploading it does not configure `AllowedProjectRoots`, grant/revoke permissions, enforce approvals or block an unsafe API call. Implement the proposed policy-based project-access gate in a separate deterministic `PolicyService` and native MAF human-in-the-loop workflow when building that next milestone.
+`05-data-classification-and-ai-use-policy.txt` is indexed as untrusted **reference knowledge**. Uploading it does not configure `AllowedProjectRoots`, grant/revoke permissions, enforce policy-based approvals or block an unsafe API call. Paths under configured roots connect directly; the Approval Center grants explicit access to a specific outside folder and is separate from policy-based authorization. Implement the proposed policy-based project-access gate in a deterministic `PolicyService` and native MAF human-in-the-loop workflow when building that next milestone.
 
 ## Relevant Microsoft Learn
 

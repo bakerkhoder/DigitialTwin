@@ -25,7 +25,7 @@ public sealed class WorkspaceTools(TwinSettings settings, ProjectCatalog catalog
             var slash = relative.IndexOf('/');
             var id = slash < 0 ? relative : relative[..slash];
             if (!catalog.TryGet(id, out var record) || record is null) throw new DirectoryNotFoundException("Linked project not found.");
-            baseDir = record.Path;
+            baseDir = catalog.ValidatePath(record.Path, record.ApprovedOutsideRoots);
             subPath = slash < 0 ? "." : relative[(slash + 1)..];
         }
         if (Path.IsPathRooted(subPath) || subPath.Contains(':')) throw new UnauthorizedAccessException("Use a workspace-relative path or connected-project ID.");

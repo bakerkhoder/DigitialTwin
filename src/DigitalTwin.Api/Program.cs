@@ -4,6 +4,8 @@ using Microsoft.Agents.AI.Hosting;
 using Microsoft.Extensions.AI;
 using OllamaSharp;
 using OpenAI;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 // Upload routes validate count and file type themselves; allow up to 15 x 8 MB documents.
@@ -68,7 +70,17 @@ client = client.AsBuilder()
         configure: telemetry => telemetry.EnableSensitiveData = false)
     .Build();
 builder.Services.AddSingleton<IChatClient>(client);
-
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource =>
+        resource.AddService("DeveloperTwin.Api"))
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddSource("DeveloperTwin.*")
+            .AddOtlpExporter();
+    });
 builder.AddAIAgent("DeveloperTwin", instructions: """
 You are DeveloperTwin, a helpful AI assistant for the user's
 engineering projects and authorized uploaded knowledge.

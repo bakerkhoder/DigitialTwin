@@ -3,6 +3,7 @@ export type KnowledgeHealth = { qdrant: boolean; ollama: boolean; message: strin
 export type KnowledgeDocument = { id: string; source: string; chunks: number; revision: string; indexedAtUtc?: string | null };
 export type KnowledgeHit = { source: string; text: string; score: number };
 export type Approval = { id: string; kind: string; summary: string; payload: string; createdAt: string };
+export type FolderScanResult = { project: string; name: string; tree: string };
 export type Message = { role: 'user' | 'assistant'; text: string; attachments?: string[]; error?: boolean };
 export type Thread = { title: string; messages: Message[]; created: number };
 

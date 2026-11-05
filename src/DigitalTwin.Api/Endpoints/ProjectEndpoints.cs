@@ -13,13 +13,47 @@ public static class ProjectEndpoints
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
             { return Results.BadRequest(new { error = ex.Message }); }
         });
-        app.MapPost("/api/projects/connect", (ConnectFolderRequest request, ProjectCatalog catalog, WorkspaceTools workspace) =>
+        app.MapPost("/api/projects/connect", (ConnectFolderRequest request, ProjectCatalog catalog,
+            ApprovalQueue queue, WorkspaceTools workspace) =>
         {
-            try { var project = catalog.Connect(request.Path);
-                  return Results.Ok(new { project = project.Id, name = project.Name, files = 0, tree = workspace.ListProject(project.Id) }); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            using var activity = DeveloperTwinTelemetry.Activities.StartActivity("folder.access.request");
+            try
+            {
+                var path = catalog.ValidateCandidatePath(request.Path);
+                if (catalog.IsUnderAllowedRoot(path))
+                {
+                    var project = catalog.Connect(path);
+                    activity?.SetTag("approval.status", "pre-approved-root");
+                    return Results.Ok(new
+                    {
+                        project = project.Id,
+                        name = project.Name,
+                        files = 0,
+                        tree = workspace.ListProject(project.Id),
+                        status = "connected"
+                    });
+                }
+
+                var action = queue.Propose(
+                    "folder-access",
+                    $"Read-only folder access: {Path.GetFileName(path)}",
+                    System.Text.Json.JsonSerializer.Serialize(new FolderAccessDraft(path)));
+                activity?.SetTag("approval.id", action.Id);
+                activity?.SetTag("approval.status", "pending");
+                return Results.Accepted($"/api/approvals/{action.Id}", new
+                {
+                    approvalId = action.Id,
+                    status = "pending",
+                    message = "This folder is outside configured allowed roots. Approval is required before it can be connected."
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            { return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status403Forbidden); }
+            catch (Exception ex) when (ex is IOException or ArgumentException)
             { return Results.BadRequest(new { error = ex.Message }); }
-        });
+        })
+            .WithSummary("Request human approval to scan a local project folder")
+            .WithDescription("Connects folders under Twin:AllowedProjectRoots directly; queues folders outside configured roots for human approval before scanning.");
         app.MapPost("/api/projects/import", async (HttpRequest request, ProjectImporter importer, CancellationToken ct) =>
         {
             if (!request.HasFormContentType) return Results.BadRequest(new { error = "Expected ZIP form upload." });
