@@ -10,7 +10,7 @@ namespace DigitalTwin.Api;
 /// Cloudflare uses the Workers AI free daily allocation; OpenRouter image calls
 /// require an explicit paid-use opt-in to prevent surprise charges.
 /// </summary>
-public sealed class ImageGenerationService(HttpClient http, IConfiguration configuration)
+public sealed class ImageGenerationService(HttpClient http, IConfiguration configuration, TwinSettings settings)
 {
     public async Task<(byte[] Bytes, string Mime)> GenerateAsync(string prompt, CancellationToken ct)
     {
@@ -52,9 +52,9 @@ public sealed class ImageGenerationService(HttpClient http, IConfiguration confi
         // No paid calls should occur just because OPENROUTER_API_KEY is configured for chat.
         if (!bool.TryParse(configuration["TWIN_ALLOW_PAID_IMAGES"], out var accepted) || !accepted)
             throw new InvalidOperationException("OpenRouter image generation requires explicit TWIN_ALLOW_PAID_IMAGES=true.");
-        var token = configuration["OPENROUTER_API_KEY"];
+        var token = settings.OpenRouterApiKey;
         if (string.IsNullOrWhiteSpace(token))
-            throw new InvalidOperationException("OPENROUTER_API_KEY is required.");
+            throw new InvalidOperationException("Configure Twin:OpenRouterApiKey or OPENROUTER_API_KEY.");
         var model = configuration["TWIN_OPENROUTER_IMAGE_MODEL"] ?? "bytedance-seed/seedream-4.5";
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/images");

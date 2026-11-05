@@ -25,4 +25,3 @@ public sealed class TwinSettings
 public sealed record KnowledgeHit(string Source, string Text, double Score);
 public sealed record ProposedAction(Guid Id, string Kind, string Summary, string Payload, DateTimeOffset CreatedAt);
 public sealed record HandoffDraft(string Title, string Content);
-

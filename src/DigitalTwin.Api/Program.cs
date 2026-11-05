@@ -18,7 +18,9 @@ if (settings.Workspace == "./workspace")
     settings.Workspace = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "data", "workspace"));
 else settings.Workspace = Path.GetFullPath(settings.Workspace);
 Directory.CreateDirectory(settings.Workspace);
-settings.OpenRouterApiKey = builder.Configuration["OPENROUTER_API_KEY"];
+var environmentApiKey = builder.Configuration["OPENROUTER_API_KEY"];
+if (!string.IsNullOrWhiteSpace(environmentApiKey))
+    settings.OpenRouterApiKey = environmentApiKey;
 var provider = settings.Provider.Trim().ToLowerInvariant();
 if (provider is not ("auto" or "openrouter" or "ollama"))
     throw new InvalidOperationException("Twin:Provider must be auto, openrouter or ollama.");
@@ -144,6 +146,10 @@ app.MapGet("/api/status", () => Results.Ok(new {
     chatModel = hosted ? settings.OpenRouterChatModel : settings.ChatModel,
     fallback = hosted && settings.EnableLocalFallback ? settings.ChatModel : "disabled",
     visionModel = hosted ? settings.OpenRouterVisionModel : settings.VisionModel,
+    visionProvider = !string.IsNullOrWhiteSpace(settings.OpenRouterApiKey) ? "openrouter" :
+        !string.IsNullOrWhiteSpace(settings.VisionModel) ? "ollama" : "off",
+    pdfAnalysisProvider = string.IsNullOrWhiteSpace(settings.OpenRouterApiKey) ? "off" : "openrouter",
+    openRouterApiKeyConfigured = !string.IsNullOrWhiteSpace(settings.OpenRouterApiKey),
     embeddings = settings.EmbeddingModel,
     imageGeneration = Environment.GetEnvironmentVariable("TWIN_IMAGE_PROVIDER") ?? "off",
     webSearch = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("EXA_API_KEY")) ? "exa" :

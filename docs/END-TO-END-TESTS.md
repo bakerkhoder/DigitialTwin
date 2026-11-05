@@ -34,13 +34,17 @@ Record result and screenshots against each case. Do not assume passing without r
 - [ ] Upload `policies.txt` and `good-to-know.txt`; both return chunk counts.
 - [ ] Query a phrase present in `policies.txt`; result includes source filename and similar passage.
 - [ ] Ask a grounded question in chat with Use knowledge enabled, verify attribution.
-- [ ] Upload a scanned PDF: verify it reports missing extractable text or uses vision only for explicitly supported image files (no OCR guarantee).
+- [ ] Upload a scanned/image-only PDF in chat: verify it is sent to OpenRouter's configured PDF parser and the model reports readable content or uncertainty rather than guessing.
+- [ ] Upload a searchable Arabic PDF and a scanned Arabic PDF: verify the response preserves Arabic content as supported by the parser/model.
+- [ ] Upload a PDF in Knowledge: verify it is analyzed through OpenRouter before being chunked and indexed.
 
 ## Chat and multimodal
 - [ ] Set `OPENROUTER_API_KEY`, use a currently active free tool-capable model.
+- [ ] Configure the key through `Twin:OpenRouterApiKey` user-secrets and verify `/api/status` reports `openRouterApiKeyConfigured: true`.
 - [ ] Chat request shows animated indicator until reply/error; can Stop and retry.
 - [ ] Attach 2 text files in one chat request, inspect returned analysis.
-- [ ] Attach a screenshot to chat, verify configured vision model works (free vision routing may fail on some providers).
+- [ ] Attach a screenshot without a vision provider: verify HTTP 503 with configuration guidance, not HTTP 500.
+- [ ] Attach a screenshot with a configured vision-capable provider: verify its description is passed with the user question.
 - [ ] Turn OpenRouter off: local qwen3:8b chat remains usable; no local vision model expected.
 - [ ] Public search tool uses Tavily/Brave when configured and has no secret code in query.
 

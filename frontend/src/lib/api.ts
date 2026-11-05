@@ -1,4 +1,4 @@
-export type ProviderStatus = { provider: string; chatModel: string; fallback: string; visionModel: string; embeddings: string; webSearch: string };
+export type ProviderStatus = { provider: string; chatModel: string; fallback: string; visionModel: string; visionProvider?: string; pdfAnalysisProvider?: string; openRouterApiKeyConfigured?: boolean; embeddings: string; webSearch: string };
 export type KnowledgeHealth = { qdrant: boolean; ollama: boolean; message: string };
 export type KnowledgeDocument = { id: string; source: string; chunks: number; revision: string; indexedAtUtc?: string | null };
 export type KnowledgeHit = { source: string; text: string; score: number };

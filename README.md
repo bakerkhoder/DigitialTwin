@@ -16,6 +16,14 @@ In **Terminal 1** (from the project root), set `OPENROUTER_API_KEY` in *that ter
 powershell -ExecutionPolicy Bypass -File .\scripts\start-backend.ps1
 ```
 
+Alternatively, store the key outside the repository in .NET user-secrets:
+
+```powershell
+dotnet user-secrets set "Twin:OpenRouterApiKey" "<your-key>" --project .\src\DigitalTwin.Api
+```
+
+The backend uses `OPENROUTER_API_KEY` when set; otherwise it uses the bound `Twin:OpenRouterApiKey` setting. Do not put keys in `TwinSettings.cs` or commit them in `appsettings.json`.
+
 In **Terminal 2**:
 
 ```powershell
@@ -45,6 +53,7 @@ Open **http://127.0.0.1:5173**. `scripts/start-dev.ps1` is now a backward-compat
 - Windows with **.NET 9 SDK**, **Node.js 20+**, **Docker Desktop**, and **Ollama**.
 - Installed Ollama models: `qwen3:8b` and `nomic-embed-text:latest` are sufficient. `llama3.2:1b` can stay installed unused.
 - An OpenRouter API key for hosted chat/vision (free-model limits and availability change). The default chat model is `cohere/north-mini-code:free` as in v3; if unavailable, change `Twin:OpenRouterChatModel` to an active free tool-capable model. Avoid relying on `openrouter/free` for guaranteed tool calling.
+- Image analysis also requires `OPENROUTER_API_KEY` and a vision-capable `Twin:OpenRouterVisionModel`, or an installed vision-capable Ollama model selected with `Twin:VisionModel`. The default text model `qwen3:8b` cannot analyze images.
 - Docker Desktop running. Qdrant uses the bundled `docker-compose.yml`.
 - Optional `TAVILY_API_KEY` or `BRAVE_SEARCH_API_KEY` for public web search.
 
@@ -101,7 +110,9 @@ You can also inspect Qdrant at **http://127.0.0.1:6333/dashboard**. If it isn't 
 3. Inspect per-file success/error. Try **Semantic knowledge search**.
 4. Go to **Assistant**, enable **Use knowledge**, and ask a question based on the source documents.
 
-**PDF limitation:** PdfPig extracts embedded selectable text; scanned-image PDFs need OCR, which is not included. Image files use OpenRouter vision when configured.
+**PDF analysis:** Every PDF uploaded in chat or Knowledge is sent to OpenRouter as a PDF attachment and analyzed with `Twin:OpenRouterVisionModel`. The request explicitly selects OpenRouter's `cloudflare-ai` PDF parser to avoid its default per-page Mistral OCR charge; model inference is still subject to the selected model's pricing and limits. PDF contents leave the local machine. Arabic, scanned pages, and visual content can be analyzed, but extraction quality and page/context limits depend on the parser and model. Keep `TextExtractor` for local text/code files.
+
+**Image analysis:** chat attachments and image ingestion in Knowledge both call `VisionTools`. With the hosted provider, set `OPENROUTER_API_KEY` and choose a vision-capable `Twin:OpenRouterVisionModel`; with Ollama, set `Twin:VisionModel` to a locally installed vision model (the app does not download one). A missing or failing provider now produces an actionable API error instead of an unhandled HTTP 500.
 
 ## 5. ZIP and large local folders
 

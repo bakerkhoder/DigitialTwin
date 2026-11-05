@@ -58,8 +58,10 @@ public static class KnowledgeEndpoints
                     await using (var output = File.Create(temporary)) await file.CopyToAsync(output, ct);
                     var content = image
                         ? await vision.Describe(temporary, "Describe this document image and extract its important information.", ct)
+                        : ext == ".pdf"
+                            ? await vision.AnalyzePdf(temporary, filename, "Extract the PDF's text and meaningful visual information for search indexing. Preserve page numbers, headings, tables, labels, and Arabic text. Do not summarize away specific details; mark unreadable or uncertain content.", ct)
                         : TextExtractor.Extract(temporary);
-                    if (string.IsNullOrWhiteSpace(content)) throw new InvalidOperationException("No extractable content. A scanned PDF may need OCR.");
+                    if (string.IsNullOrWhiteSpace(content)) throw new InvalidOperationException("The configured analyzer returned no readable content.");
                     int chunks = await knowledge.Ingest(filename, content, ct);
                     sessions.InvalidateAllAfterKnowledgeChange();
                     outcomes.Add(new { file = filename, chunks });

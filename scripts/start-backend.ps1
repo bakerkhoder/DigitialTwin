@@ -18,7 +18,7 @@ catch {
     } finally { Pop-Location }
 }
 if (-not $env:OPENROUTER_API_KEY) {
-    Write-Warning 'OPENROUTER_API_KEY is not set in this terminal: Provider=auto will use Ollama.'
+    Write-Host 'OPENROUTER_API_KEY is not set in this terminal; app configuration or .NET user-secrets may still provide it.' -ForegroundColor DarkGray
 }
 if (-not $env:TAVILY_API_KEY -and -not $env:BRAVE_SEARCH_API_KEY) {
     Write-Warning 'Web search: OFF. Set TAVILY_API_KEY (free quota available) in THIS terminal before starting the backend.'

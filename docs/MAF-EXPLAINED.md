@@ -21,7 +21,7 @@ Software engineers receive source repositories, ERP requirement documents, issue
 
 1. Engineer selects multiple PDFs, business documents, notes or text/code files in React Knowledge Library.
 2. `/api/knowledge/batch` validates count, extensions and individual sizes.
-3. `TextExtractor` reads text in PDFs and plain text files. `VisionTools` describes image uploads via a compatible vision model on OpenRouter (requires API key).
+3. Every PDF is sent to OpenRouter as a file and processed with its `cloudflare-ai` PDF parser, then analyzed by `Twin:OpenRouterVisionModel`; text/code files use local `TextExtractor`, while image uploads use `VisionTools` with configured OpenRouter or local Ollama vision.
 4. `KnowledgeStore` splits text into ~1,100-character overlapping chunks.
 5. For each chunk the service calls local Ollama `/api/embed` using the already-installed `nomic-embed-text:latest` model, producing a 768-dimensional vector.
 6. The service checks/creates a Qdrant collection and stores the vector with `source`, `text`, `chunk` payload.
@@ -77,7 +77,7 @@ flowchart TB
 6. **`Services/ProjectCatalog.cs`**: controlled absolute folder paths; configured roots connect directly, while explicitly approved outside folders are revalidated and persisted as narrowly scoped linked IDs. No shell commands.
 7. **`Services/ProjectImporter.cs`**: ZIP guardrails and extraction to inert data outside compilation.
 8. **`Services/KnowledgeStore.cs`**: local embeddings, Qdrant collection and query. The source/payload is the provenance mechanism.
-9. **`Services/VisionTools.cs`**: OpenRouter multimodal REST; no local vision model required.
+9. **`Services/VisionTools.cs`**: OpenRouter multimodal REST or configured local Ollama vision model; a vision-capable model is required.
 10. **`Services/WebSearchTools.cs`**: optional external public web retrieval.
 11. **`Services/HandoffTools.cs`**: a proposed report, not immediate external mutation. `ApprovalQueue` retains it temporarily.
 12. **`Services/ReportExporter.cs`**: non-generative, deterministic file creation. Different from model reasoning.
