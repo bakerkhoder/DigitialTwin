@@ -16,7 +16,7 @@ public sealed class WebSearchTools(HttpClient http)
     private long _providerCalls;
     private string _lastOutcome = "not-called";
 
-    // These are diagnostics only. Neither API key is ever returned to the browser.
+    // These are diagnostics only. No API key is ever returned to the browser.
     public object GetStatus() => new
     {
         provider = CurrentProvider(),
@@ -26,6 +26,7 @@ public sealed class WebSearchTools(HttpClient http)
     };
 
     private static string CurrentProvider() =>
+        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("EXA_API_KEY")) ? "exa" :
         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TAVILY_API_KEY")) ? "tavily" :
         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BRAVE_SEARCH_API_KEY")) ? "brave" : "off";
 
@@ -53,13 +54,16 @@ public sealed class WebSearchTools(HttpClient http)
 
         var provider = CurrentProvider();
         if (provider == "off")
-            return Error("unconfigured", "Set TAVILY_API_KEY or BRAVE_SEARCH_API_KEY in the backend process, then restart it.");
+            return Error("unconfigured", "Set EXA_API_KEY, TAVILY_API_KEY or BRAVE_SEARCH_API_KEY in the backend process, then restart it.");
 
         try
         {
-            using var request = provider == "tavily"
-                ? CreateTavilyRequest(query, maxResults, freshness)
-                : CreateBraveRequest(query, maxResults, freshness);
+            using var request = provider switch
+            {
+                "exa" => CreateExaRequest(query, maxResults, freshness),
+                "tavily" => CreateTavilyRequest(query, maxResults, freshness),
+                _ => CreateBraveRequest(query, maxResults, freshness)
+            };
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(12));
             Interlocked.Increment(ref _providerCalls);
             using var response = await http.SendAsync(request, timeout.Token);
@@ -77,9 +81,12 @@ public sealed class WebSearchTools(HttpClient http)
 
             await using var body = await response.Content.ReadAsStreamAsync(timeout.Token);
             using var doc = await JsonDocument.ParseAsync(body, cancellationToken: timeout.Token);
-            var items = provider == "tavily"
-                ? ExtractTavily(doc.RootElement, maxResults)
-                : ExtractBrave(doc.RootElement, maxResults);
+            var items = provider switch
+            {
+                "exa" => ExtractExa(doc.RootElement, maxResults),
+                "tavily" => ExtractTavily(doc.RootElement, maxResults),
+                _ => ExtractBrave(doc.RootElement, maxResults)
+            };
             Volatile.Write(ref _lastOutcome, items.Length == 0 ? "empty" : "ok");
             return JsonSerializer.Serialize(new
             {
@@ -101,6 +108,39 @@ public sealed class WebSearchTools(HttpClient http)
         {
             return Error("provider_error", "Search provider returned invalid JSON.", provider);
         }
+    }
+
+    // Exa offers a no-card starter credit. Use the economical cached/lite search
+    // instead of its more expensive deep research and summarization modes.
+    private static HttpRequestMessage CreateExaRequest(string query, int count, string freshness)
+    {
+        var data = new Dictionary<string, object>
+        {
+            ["query"] = query,
+            ["type"] = "lite",
+            ["numResults"] = count,
+            ["contents"] = new { text = new { maxCharacters = 600 } }
+        };
+        if (freshness != "any")
+        {
+            var days = freshness switch { "day" => 1, "week" => 7, _ => 30 };
+            data["startPublishedDate"] = DateTimeOffset.UtcNow.AddDays(-days).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        }
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.exa.ai/search")
+        {
+            Content = JsonContent.Create(data)
+        };
+        request.Headers.Add("x-api-key", Environment.GetEnvironmentVariable("EXA_API_KEY"));
+        return request;
+    }
+
+    private static SearchResult[] ExtractExa(JsonElement root, int count)
+    {
+        if (!root.TryGetProperty("results", out var results) || results.ValueKind != JsonValueKind.Array)
+            return [];
+        return results.EnumerateArray().Take(count).Select(x => new SearchResult(
+            Read(x, "title", 150), Read(x, "url", 800), Read(x, "text", 500)))
+            .Where(x => IsPublicUrl(x.Url)).ToArray();
     }
 
     private static HttpRequestMessage CreateTavilyRequest(string query, int count, string freshness)

@@ -134,8 +134,9 @@ app.MapGet("/api/status", () => Results.Ok(new {
     visionModel = hosted ? settings.OpenRouterVisionModel : settings.VisionModel,
     embeddings = settings.EmbeddingModel,
     imageGeneration = Environment.GetEnvironmentVariable("TWIN_IMAGE_PROVIDER") ?? "off",
-    webSearch = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TAVILY_API_KEY")) ? "tavily" :
-        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BRAVE_SEARCH_API_KEY")) ? "brave" : "off (configure free Tavily key)",
+    webSearch = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("EXA_API_KEY")) ? "exa" :
+        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TAVILY_API_KEY")) ? "tavily" :
+        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BRAVE_SEARCH_API_KEY")) ? "brave" : "off (configure a search API key)",
     workspace = "data/workspace" // show logical location, not machine-specific full path
 }));
 // Explicitly describe telemetry configuration; no API keys or raw endpoint headers.
