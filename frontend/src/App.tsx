@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, BrainCircuit, FolderGit2, ShieldCheck, Plus, Activity, Sparkles, RefreshCw, PanelRightClose, PanelRightOpen, Circle, ChevronRight, Info, Trash2 } from 'lucide-react';
 import Chat from './components/Chat';
 import Knowledge from './components/Knowledge';
@@ -64,6 +64,8 @@ export default function App() {
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [health, setHealth] = useState<KnowledgeHealth | null>(null);
   const [approvalCount, setApprovalCount] = useState(0);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [approvalError, setApprovalError] = useState('');
   const [approvedProject, setApprovedProject] = useState<FolderScanResult | null>(null);
   const [rightVisible, setRightVisible] = useState(true);
   const [logs, setLogs] = useState<LogItem[]>([{ name:'Workspace ready', detail:'DeveloperTwin UI loaded', time: Date.now() }]);
@@ -92,16 +94,20 @@ export default function App() {
     try { setStatus(await api<ProviderStatus>('/api/status')); } catch { setStatus(null); }
     try { setHealth(await api<KnowledgeHealth>('/api/knowledge/health')); } catch { setHealth(null); }
   };
-  const refreshApprovalCount = async () => {
-    try { setApprovalCount((await api<Approval[]>('/api/approvals')).length); }
-    catch (error) { console.warn('Approval count could not be refreshed:', error); }
-  };
+  const refreshApprovals = useCallback(async () => {
+    try {
+      const current = await api<Approval[]>('/api/approvals');
+      setApprovals(current);
+      setApprovalCount(current.length);
+      setApprovalError('');
+    } catch (error) {
+      setApprovalError((error as Error).message);
+    }
+  }, []);
   useEffect(() => { void refreshStatus(); }, []);
   useEffect(() => {
-    void refreshApprovalCount();
-    const timer = window.setInterval(() => void refreshApprovalCount(), 15000);
-    return () => window.clearInterval(timer);
-  }, []);
+    if (view === 'approvals') void refreshApprovals();
+  }, [view, refreshApprovals]);
   const updateMessages = (id:string, fn:(messages:Message[])=>Message[]) => setThreads(prev => {
     const prior = prev[id]; const messages = fn(prior?.messages || []);
     const revised = { ...prev, [id]: { title: prior?.title ?? messages[0]?.text.slice(0,55) ?? 'New conversation', created: prior?.created ?? Date.now(), messages } };
@@ -169,11 +175,17 @@ export default function App() {
   const requestReview = (content:string) => {
     const title = threads[active]?.title || 'Engineering handoff';
     void api('/api/approvals/propose', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title,content}) })
-      .then(()=>{activity('Handoff submitted','Review requested');setView('approvals');})
+      .then(()=>{
+        activity('Handoff submitted','Review requested');
+        setApprovalCount(count => count + 1);
+        if (view === 'approvals') void refreshApprovals();
+        else setView('approvals');
+      })
       .catch(e=>window.alert(`Review request failed: ${(e as Error).message}`));
   };
   const askProject = (query:string) => { setDraft(query); setView('chat'); };
   const openApprovedProject = (project: FolderScanResult) => { setApprovedProject(project); setView('projects'); };
+  const onFolderApprovalRequested = () => setApprovalCount(count => count + 1);
   const threadEntries = Object.entries(threads).sort((a,b) => b[1].created - a[1].created);
   const menu: {id:View;label:string;icon:typeof Bot}[] = [
     {id:'chat',label:'Assistant',icon:Bot},{id:'knowledge',label:'Knowledge library',icon:BrainCircuit},
@@ -198,7 +210,7 @@ export default function App() {
     </aside>
     <div className="main-frame"><header className="topbar"><div className="crumb">WORKSPACE <span>/</span> <strong>{menu.find(m=>m.id===view)?.label}</strong></div><div className="top-actions"><div className="provider-pill"><span className={status ? 'online':'offline'}/>{status?.provider?.toUpperCase() ?? 'OFFLINE'} · {status?.chatModel ?? 'Disconnected'}</div><button onClick={()=>setRightVisible(!rightVisible)} aria-label="Toggle activity panel" className="ghost icon-only">{rightVisible?<PanelRightClose size={18}/>:<PanelRightOpen size={18}/>}</button></div></header>
       <main className="main-area">{storageWarning && <div className="storage-warning" role="status">{storageWarning}<button type="button" onClick={() => setStorageWarning('')}>Dismiss</button></div>}{view==='chat' ? <Chat messages={threads[active]?.messages || []} busy={busy} onSend={send} onStop={stopActive} onExport={exportAnswer} onReview={requestReview} draft={draft} setDraft={setDraft}/>
-        : view==='knowledge' ? <Knowledge activity={activity}/> : view==='projects' ? <Projects activity={activity} onAsk={askProject} onApprovalRequested={() => void refreshApprovalCount()} openApprovals={() => setView('approvals')} initialProject={approvedProject}/> : <Approvals activity={activity} onProjectConnected={openApprovedProject} onQueueChanged={() => void refreshApprovalCount()}/>}</main>
+        : view==='knowledge' ? <Knowledge activity={activity}/> : view==='projects' ? <Projects activity={activity} onAsk={askProject} onApprovalRequested={onFolderApprovalRequested} openApprovals={() => setView('approvals')} initialProject={approvedProject}/> : <Approvals activity={activity} items={approvals} loadError={approvalError} onRefresh={refreshApprovals} onProjectConnected={openApprovedProject} onQueueChanged={refreshApprovals}/>}</main>
     </div>
     <aside className="activity-panel"><div className="activity-heading"><Activity size={17}/><strong>Agent activity</strong></div><p className="small-muted">Your operations, model and service health.</p>
       <div className="timeline">{logs.map((log,i)=><div className="timeline-item" key={log.time+i}><div className="timeline-icon">{i===0?<Sparkles size={15}/>:<Activity size={15}/>}</div><div><strong>{log.name}</strong><small>{log.detail}</small><span>{new Date(log.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></div></div>)}</div>
