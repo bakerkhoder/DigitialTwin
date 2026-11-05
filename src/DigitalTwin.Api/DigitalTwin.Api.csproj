@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>13.0</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="Templates/handoff-template.pptx" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="workspace/**/*.cs" />
+    <Content Remove="workspace/**" />
+    <None Remove="workspace/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="QuestPDF" Version="2026.9.1" />
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
+    <!-- Pin MAF core and hosting to the same release family. Hosting is a prerelease. -->
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.27.0" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting" Version="1.27.0-preview.261030.1" />
+    <!-- OpenAI-compatible OpenRouter chat -> Microsoft.Extensions.AI.IChatClient -->
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.11.0" />
+    <PackageReference Include="OllamaSharp" Version="5.5.0" />
+    <!-- Stable, officially published package; C# namespace is still UglyToad.PdfPig. -->
+    <PackageReference Include="PdfPig" Version="0.1.16" />
+    <!-- A single pinned OpenTelemetry release family avoids mismatched SDK dependencies. -->
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.18.0" />
+  </ItemGroup>
+</Project>

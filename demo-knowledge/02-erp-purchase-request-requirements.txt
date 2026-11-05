@@ -1,0 +1,40 @@
+DEVELOPERTWIN DEMO KNOWLEDGE — ERP PURCHASE REQUEST FEATURE
+Document ID: DEMO-REQ-022 | Sprint target: 2026-Q4 | Status: Draft for analysis
+System: ProcureStudio (fictional ERP training application)
+
+BUSINESS GOAL
+Allow employees to create purchase requests, route them for the right approvals, and see a complete audit trail. Finance wants to prevent overspending and duplicates.
+
+PERSONAS
+- Employee: creates and edits draft requests.
+- Team Lead: approves requests up to $10,000.
+- Department Head: approves requests above $10,000 through $50,000.
+- CFO: approves requests above $50,000.
+- Procurement Officer: validates supplier details and quote attachments.
+
+FUNCTIONAL REQUIREMENTS
+REQ-01: Every request has a unique PR number, requester ID, department ID, currency, list of items, supplier candidate, and creation date.
+REQ-02: A request starts in Draft. Submit changes status to PendingApproval and freezes the amount/items until rejection or an explicit change request.
+REQ-03: Approval route must follow policy DEMO-POL-001, including total amount inclusive of tax.
+REQ-04: When total exceeds $25,000, the UI must require at least three vendor-quote attachments unless a documented exception is approved by Procurement Manager.
+REQ-05: An approver may Approve or Reject and must supply a comment for rejection.
+REQ-06: Every transition writes an immutable audit record with actor, action, previous status, new status and UTC time.
+REQ-07: When approved, Procurement may convert the PR into a PO; double submission must not create two POs.
+REQ-08: Employees can view their own requests; approvers see requests assigned to them.
+
+VALIDATION AND NON-FUNCTIONAL REQUIREMENTS
+- Minimum 1 line item; amounts must be positive; maximum 100 line items.
+- Dates and audit timestamps must use UTC.
+- API must validate role/authorization, not trust frontend role labels.
+- Use optimistic concurrency when two approvers act on the same request.
+- Prefer idempotency keys for Submit and Convert-to-PO operations.
+- SLA target for retrieving a request by ID: p95 < 500ms in a non-loaded test environment.
+
+OUT-OF-SCOPE
+Payment gateway integration, supplier onboarding, accounting ledger posting.
+
+OPEN QUESTIONS
+Who can override a rejected request? How are multi-currency exchange rates chosen? Should approvals be serial or parallel for multi-department purchases? These questions need stakeholder decisions before implementation.
+
+RELATED DOCUMENTS
+DEMO-POL-001 procurement approval policy, DEMO-ARCH-008 architecture notes, DEMO-API-004 contracts.

@@ -1,0 +1,35 @@
+DEVELOPERTWIN DEMO KNOWLEDGE — FICTIONAL PROCUREMENT POLICY
+Document ID: DEMO-POL-001 | Version: 1.2 | Effective: 2026-10-01
+Organization: Northstar Demo Industries (fictional training company)
+Owner: Procurement Operations
+
+PURPOSE
+Set approval and evidence requirements for internal purchase orders (POs). This is sample knowledge for an AI-agent demonstration, NOT a real company policy.
+
+APPROVAL LIMITS (currency: USD, total PO amount including tax)
+- PO amount <= $10,000: Team Lead approval.
+- PO amount > $10,000 and <= $50,000: Department Head approval.
+- PO amount > $50,000: CFO approval.
+- Exactly $10,000 is within Team Lead authority; exactly $50,000 is within Department Head authority.
+- Approval is based on total amount, not per line item.
+
+VENDOR QUOTES
+- PO amount > $25,000 requires at least three independent vendor quotes, even when the approver is Department Head or CFO.
+- A single-source purchase may bypass three quotes ONLY with written Procurement justification and separate Procurement Manager approval.
+
+FORBIDDEN PRACTICES
+- Splitting one purchase into several POs to stay below an approval limit is prohibited.
+- A requester cannot approve their own PO.
+- A PO cannot be sent to the supplier before all required approvals.
+
+AUDIT FIELDS
+Every decision must record PO number, amount, currency, requester, approver, decision, timestamp in UTC, and a reason for rejection or exceptional approval.
+
+WORKED EXAMPLES
+- PO-1001, total $9,500 => Team Lead; no three-quote rule.
+- PO-1002, total $38,000 => Department Head plus at least three vendor quotes.
+- PO-1003, total $62,000 => CFO plus at least three vendor quotes.
+- PO-1004, total $25,000 => Department Head; three quotes NOT required by the strict greater-than-$25,000 rule.
+
+NOTE FOR DEMO
+This document is RETRIEVAL DATA, not executable authorization. An actual backend PolicyService must enforce limits and approvals independently of what the model says.

@@ -1,0 +1,31 @@
+DEVELOPERTWIN DEMO KNOWLEDGE — AI DATA HANDLING POLICY
+Document ID: DEMO-SEC-011 | Classification: Training Policy (fictional)
+Owner: Security & Compliance
+
+CLASSIFICATION TIERS
+PUBLIC: open-source code, publicly released documentation and public standards.
+INTERNAL: team documentation, non-secret architecture, test-only datasets.
+CONFIDENTIAL: production ERP source, client files, real employee records, credentials or account data.
+
+AI PROVIDER RULES
+- PUBLIC can be used with approved hosted AI providers.
+- INTERNAL may be used with hosted AI only with organization authorization.
+- CONFIDENTIAL may NOT be uploaded to third-party AI/search providers unless a separate authorized agreement and explicit data-flow approval are in place.
+- Local processing does not automatically eliminate all risk; protect files and databases from other users.
+
+EXAMPLE PROJECT ROOT RULES (for discussion only)
+- E:\Training\PublicDemos : allowed for read-only inspection.
+- E:\Training\RestrictedERP : requires human approval for read-only inspection.
+- C:\Users\... : not automatically approved, even if the user types a path.
+
+APPROVAL PROCEDURE
+A restricted project-access request must include requester, exact canonical project root, operation type, purpose, destination model (local/hosted), expiry and approver decision.
+A human approves before the first protected file is read or transmitted to a hosted model.
+Every decision must be auditable and tied to that specific request. Approval for reading does not imply permission to run code, write files or upload to hosted AI.
+
+CRITICAL IMPLEMENTATION NOTE
+THIS TXT DOCUMENT IS REFERENCE KNOWLEDGE, NOT A PERMISSION ENGINE. The current DeveloperTwin demo does not enforce these policy clauses solely by ingesting this file. Enforcement requires a deterministic PolicyService, identity, filesystem authorization, and a real human-in-the-loop execution gate.
+
+EXAMPLE USER QUESTION
+'Can I send a confidential ERP source file to OpenRouter to summarize it?'
+Expected policy summary: Not without independent organizational authorization; keep it local by default.

@@ -1,0 +1,36 @@
+DEVELOPERTWIN DEMO KNOWLEDGE — ERP API CONTRACTS AND TEST CASES
+Document ID: DEMO-API-004 | Product: ProcureStudio | Fictional
+
+REST ENDPOINTS
+POST /api/purchase-requests
+  Input: { "departmentId": "D10", "currency": "USD", "items": [{ "sku": "LAPTOP", "quantity": 2, "unitPrice": 2100 }] }
+  Result: 201 Created with { "requestId": "PR-2026-00042", "status": "Draft" }
+POST /api/purchase-requests/{id}/submit
+  Header: Idempotency-Key (required); result 200 with status PendingApproval.
+GET /api/purchase-requests/{id}
+  Result: id, requesterId, totalAmount, currency, items, status, currentApprover.
+POST /api/purchase-requests/{id}/approve
+  Input: { "decision": "Approve", "comment": "Within budget" }
+  Validates current approver identity and optimistic concurrency.
+GET /api/purchase-requests/{id}/audit
+  Returns chronological immutable decisions and status changes, accessible only to authorized roles.
+
+ERROR CONTRACT
+400: input validation errors, standard problem details body.
+401: authentication missing.
+403: requester is not the authorized approver.
+404: purchase request not found.
+409: concurrency conflict; refresh before retrying.
+422: required vendor quotes missing.
+
+ACCEPTANCE EXAMPLES
+TC-01: submitting a $10,000 request routes to Team Lead.
+TC-02: submitting a $10,001 request routes to Department Head.
+TC-03: submitting a $50,001 request routes to CFO.
+TC-04: $38,000 with two quotes fails with 422 (unless approved single-source exception).
+TC-05: repeated Submit with same idempotency key does not duplicate business side effects.
+TC-06: two concurrent decisions cannot produce conflicting final statuses.
+TC-07: employee in another department cannot approve someone else's PO.
+
+LIMITATION
+Contracts illustrate expected behavior; no running backend is provided by these TXT files.

@@ -1,0 +1,30 @@
+DEVELOPERTWIN DEMO KNOWLEDGE — ENGINEERING INCIDENT RUNBOOK
+Document ID: DEMO-RUNBOOK-004 | Severity: Internal training incidents
+
+INCIDENT A: QDRANT PORT 6333 IS UNREACHABLE
+Symptoms: Knowledge ingestion says 'Connection refused 127.0.0.1:6333'.
+Check: docker compose ps; open http://127.0.0.1:6333/dashboard; inspect container logs.
+Action: Start or reuse the expected Qdrant container. If port 6333 is already bound, identify the existing service before starting another container. Do not delete volumes without explicit consent.
+Verification: GET /api/knowledge/health reports qdrant=true, then upload a short sample TXT and retrieve it.
+
+INCIDENT B: ASP.NET CORE COMPILATION FAILS AFTER IMPORTING A ZIP
+Symptoms: Compiler errors reference imported source code under workspace/projects.
+Cause: SDK default Compile glob accidentally includes imported .cs files.
+Action: Keep imported project files outside src/DigitalTwin.Api and retain the Compile Remove exclusion.
+Verification: Import a sample ZIP, restart dotnet build, confirm no external source files compile into DeveloperTwin.
+
+INCIDENT C: AGENT HALLUCINATES A PACKAGE VERSION
+Check: Was SearchWeb actually called? Is its provider configured? Did the tool return official URLs?
+Action: Ask for official release notes, date and citations; use a freshness filter when version recency matters. Never present guessed versions as verified.
+
+INCIDENT D: HOSTED MODEL UNAVAILABLE
+Symptoms: OpenRouter rate limit or authorization error.
+Check: API key availability in backend process, model availability, quotas. Confirm which model appears in /api/status.
+Action: Retry after limits reset or use the already-installed local qwen3:8b if permitted. Local fallback may not have identical tool-calling performance.
+
+INCIDENT E: PDF EXPORT FAILS ON UNICODE GLYPHS
+Symptoms: QuestPDF reports missing glyphs for emoji or Arabic text.
+Action: Register appropriate permitted Unicode fonts, including Arabic/emoji fallback; retest. Do not silently drop important characters.
+
+AUDIT PRACTICE
+Capture timestamp, incident ID, observed symptoms, affected component, mitigation, validation results and follow-up owner; do not place tokens or secrets in tickets/logs.

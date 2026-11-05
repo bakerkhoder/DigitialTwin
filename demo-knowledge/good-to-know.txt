@@ -1,0 +1,29 @@
+
+DOCUMENT TITLE: DeveloperTwin User Profile
+
+DOCUMENT TYPE: Personal preferences
+SOURCE: User-provided demo knowledge
+
+PROFILE
+Name: Abker
+Previous workplace: Codendot
+Workplace location: Tripoli, Lebanon
+
+SPORTS AND INTERESTS
+Preferred sport: Football
+Comparison: The user prefers football over basketball.
+
+NUMBERS
+Favorite number: 7
+Comparison: The user prefers number 7 over number 10.
+
+PURPOSE
+This document is provided by the user so DeveloperTwin
+can answer questions about the user's preferences.
+
+EXAMPLE QUESTIONS
+- What is my name?
+- Which sport do I prefer?
+- Do I prefer football or basketball?
+- What is my favorite number?
+- Where did I previously work?

@@ -1,0 +1,27 @@
+DEVELOPERTWIN DEMO KNOWLEDGE — NEW ENGINEER HANDOFF CHECKLIST
+Document ID: DEMO-ONBOARD-007 | Product: ProcureStudio | Fictional
+
+DAY 1: UNDERSTAND THE BUSINESS
+- Read DEMO-REQ-022 and DEMO-POL-001 to understand purchase requests and approval thresholds.
+- Understand the distinction between PR (request) and PO (approved purchase order).
+- Identify actors: Employee, Team Lead, Department Head, CFO, Procurement Officer.
+
+DAY 2: UNDERSTAND THE CODE
+- Review API entry points, request handlers, domain services, persistence adapters, and UI routes.
+- Read DEMO-ARCH-008 for the outbox and RabbitMQ integration rationale.
+- Verify environment variables are provided through user secrets or secure configuration.
+
+DAY 3: VERIFY THE WORKFLOW
+- Create a $9,500 sample request and confirm Team Lead route.
+- Create a $38,000 request with two vendor quotes and confirm rejection of submission.
+- Retry with three quotes and confirm approval routing to Department Head.
+- Verify audit trail timestamps are UTC and idempotency prevents duplicate PO creation.
+
+HANDOFF DOCUMENT SHOULD CONTAIN
+Business purpose, modules, solution structure, packages, runtime dependencies, data model, main REST routes, environment setup, external integrations, failure cases, tests, known risks, next steps, and a list of source files actually inspected.
+
+COMMON FIRST WEEK PITFALLS
+- Don't confuse the DeveloperTwin Qdrant vector DB with the ERP's PostgreSQL database.
+- Don't infer business authorization from React UI visibility.
+- Don't assume RabbitMQ delivery happens atomically with the request transaction; inspect outbox logic.
+- Don't copy API keys into project documentation or a public search query.
