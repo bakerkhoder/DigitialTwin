@@ -39,7 +39,9 @@ Record result and screenshots against each case. Do not assume passing without r
 - [ ] Upload a PDF in Knowledge: verify it is analyzed through OpenRouter before being chunked and indexed.
 
 ## Chat and multimodal
-- [ ] Set `OPENROUTER_API_KEY`, use a currently active free tool-capable model.
+- [ ] With `OPENROUTER_API_KEY` configured and default `Twin:Provider=ollama`, verify `/api/status` reports `provider=ollama`, `chatModel=qwen3:8b`, and `openRouterApiKeyConfigured=true`.
+- [ ] Verify image and PDF analysis still use the configured OpenRouter vision model with the key present.
+- [ ] Explicitly set `Twin:Provider=openrouter` and verify chat uses the configured OpenRouter chat model; restore `ollama` afterward.
 - [ ] Configure the key through `Twin:OpenRouterApiKey` user-secrets and verify `/api/status` reports `openRouterApiKeyConfigured: true`.
 - [ ] Chat request shows animated indicator until reply/error; can Stop and retry.
 - [ ] Attach 2 text files in one chat request, inspect returned analysis.

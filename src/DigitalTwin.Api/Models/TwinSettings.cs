@@ -6,7 +6,7 @@ public sealed class TwinSettings
     [JsonIgnore] public string? OpenRouterApiKey { get; set; }
     public string Workspace { get; set; } = "./workspace";
     public string OllamaUrl { get; set; } = "http://127.0.0.1:11434";
-    public string Provider { get; set; } = "auto";
+    public string Provider { get; set; } = "ollama";
     public bool EnableLocalFallback { get; set; } = true;
     public string OpenRouterChatModel { get; set; } = "cohere/north-mini-code:free";
     public string OpenRouterVisionModel { get; set; } = "openrouter/free";

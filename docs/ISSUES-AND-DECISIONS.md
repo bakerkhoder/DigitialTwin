@@ -3,7 +3,7 @@
 | ID | Problem or decision | Current state | Implementation / remaining check |
 |---|---|---|---|
 | DT-001 | NuGet `UglyToad.PdfPig` floating prerelease | Source fixed earlier | Stable `PdfPig` pinned. Verify restore on Windows. |
-| DT-002 | OpenRouter-first chat (avoid unnecessary downloads) | Retained | Optional free API, qwen3:8b local fallback; verify live model/tool support. |
+| DT-002 | Conserve hosted-model quota for specialized tasks | Local-first chat | Default chat uses local qwen3:8b; OpenRouter remains available for image/PDF analysis and explicit chat opt-in. |
 | DT-003 | Image understanding | Retained | OpenRouter vision endpoint. Vision model may require an active multimodal free route. |
 | DT-004 | Imported source files break `dotnet build` | **Fixed in source** | Workspace moved to top-level `data/workspace` + csproj compile exclusion for legacy workspace. Confirm regression test. |
 | DT-005 | Qdrant connection refused `127.0.0.1:6333` | **Diagnosed / health UI added** | Start `docker compose up -d`. Confirm local Docker and embeddings. |
@@ -26,7 +26,7 @@
 ## Scope principles
 1. Demonstrate one genuine MAF-hosted agent with typed C# tools before adding more agents.
 2. Keep uploaded external project source inert and physically separate from app builds.
-3. Keep local embeddings (already downloaded) while hosted chat/vision is optional.
+3. Keep local chat and embeddings as defaults; use hosted vision/PDF analysis where needed and make hosted chat opt-in.
 4. Keep features small enough to defend in 15 minutes.
 5. When Codex changes files, update this ledger and run `scripts/verify-v4.ps1`.
 

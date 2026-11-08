@@ -50,7 +50,8 @@ builder.Services.AddSingleton<ReportExporter>();
 builder.Services.AddHttpClient<ImageGenerationService>(client => client.Timeout = TimeSpan.FromMinutes(2));
 builder.Services.AddSingleton<SessionRegistry>();
 
-// Chat providers: OpenRouter first, installed qwen3:8b local fallback.
+// Chat defaults to the installed local qwen3:8b model. OpenRouter chat is opt-in
+// through Twin:Provider=auto or openrouter; vision/PDF tools use their own provider path.
 IChatClient local = new OllamaApiClient(new Uri(settings.OllamaUrl), settings.ChatModel);
 IChatClient client = local;
 if (hosted)
@@ -146,7 +147,9 @@ app.MapGet("/api/status", () => Results.Ok(new {
     provider = hosted ? "openrouter" : "ollama",
     chatModel = hosted ? settings.OpenRouterChatModel : settings.ChatModel,
     fallback = hosted && settings.EnableLocalFallback ? settings.ChatModel : "disabled",
-    visionModel = hosted ? settings.OpenRouterVisionModel : settings.VisionModel,
+    visionModel = !string.IsNullOrWhiteSpace(settings.OpenRouterApiKey)
+        ? settings.OpenRouterVisionModel
+        : settings.VisionModel,
     visionProvider = !string.IsNullOrWhiteSpace(settings.OpenRouterApiKey) ? "openrouter" :
         !string.IsNullOrWhiteSpace(settings.VisionModel) ? "ollama" : "off",
     pdfAnalysisProvider = string.IsNullOrWhiteSpace(settings.OpenRouterApiKey) ? "off" : "openrouter",

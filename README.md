@@ -22,7 +22,7 @@ Alternatively, store the key outside the repository in .NET user-secrets:
 dotnet user-secrets set "Twin:OpenRouterApiKey" "<your-key>" --project .\src\DigitalTwin.Api
 ```
 
-The backend uses `OPENROUTER_API_KEY` when set; otherwise it uses the bound `Twin:OpenRouterApiKey` setting. Do not put keys in `TwinSettings.cs` or commit them in `appsettings.json`.
+The backend uses `OPENROUTER_API_KEY` when set; otherwise it uses the bound `Twin:OpenRouterApiKey` setting. The key enables OpenRouter-backed image/PDF analysis; ordinary chat still uses local Ollama by default. To explicitly opt into OpenRouter for chat, set `Twin:Provider` to `openrouter` (or `auto`). Do not put keys in `TwinSettings.cs` or commit them in `appsettings.json`.
 
 In **Terminal 2**:
 
@@ -46,13 +46,13 @@ Open **http://127.0.0.1:5173**. `scripts/start-dev.ps1` is now a backward-compat
 - **Smaller C# classes:** `WorkspaceTools`, `ProjectImporter`, `ProjectCatalog`, `KnowledgeStore`, `VisionTools`, `WebSearchTools`, `ReportExporter`, `ApprovalQueue` are separate services; Minimal API endpoints are grouped by feature.
 - **Real report files:** `ReportExporter` generates PDF (QuestPDF), PowerPoint (OpenXML SDK), SVG vector diagram and Markdown. Agent writes report content; export logic uses deterministic code.
 - **Simpler approvals:** Agent can propose a handoff; human approves or rejects PDF export. Azure DevOps publishing removed for now.
-- **Hosted-first:** OpenRouter chat/vision with optional fallback to installed `qwen3:8b`; local `nomic-embed-text` embeddings. No other Ollama downloads are needed.
+- **Local-first chat:** ordinary chat uses installed `qwen3:8b` by default, even when an OpenRouter key is configured. OpenRouter remains available for image/PDF analysis and can be explicitly selected for chat; local `nomic-embed-text` embeddings remain unchanged.
 
 ## 2. What you already need
 
 - Windows with **.NET 9 SDK**, **Node.js 20+**, **Docker Desktop**, and **Ollama**.
 - Installed Ollama models: `qwen3:8b` and `nomic-embed-text:latest` are sufficient. `llama3.2:1b` can stay installed unused.
-- An OpenRouter API key for hosted chat/vision (free-model limits and availability change). The default chat model is `cohere/north-mini-code:free` as in v3; if unavailable, change `Twin:OpenRouterChatModel` to an active free tool-capable model. Avoid relying on `openrouter/free` for guaranteed tool calling.
+- An OpenRouter API key for image/PDF analysis (free-model limits and availability change). Chat uses local `qwen3:8b` by default. To opt into OpenRouter chat, set `Twin:Provider` to `openrouter` (requires the key) or `auto`; set `Twin:OpenRouterChatModel` to an active tool-capable model. Avoid relying on `openrouter/free` for guaranteed tool calling.
 - Image analysis also requires `OPENROUTER_API_KEY` and a vision-capable `Twin:OpenRouterVisionModel`, or an installed vision-capable Ollama model selected with `Twin:VisionModel`. The default text model `qwen3:8b` cannot analyze images.
 - Docker Desktop running. Qdrant uses the bundled `docker-compose.yml`.
 - Optional `TAVILY_API_KEY` or `BRAVE_SEARCH_API_KEY` for public web search.

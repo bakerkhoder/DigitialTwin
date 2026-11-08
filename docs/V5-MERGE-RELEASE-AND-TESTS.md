@@ -5,7 +5,7 @@ This is a **full source snapshot** based on the last packaged MAF + React + Open
 ## Implemented in this snapshot
 
 - Microsoft Agent Framework hosted `DeveloperTwin` agent, in-memory sessions and typed C# tools.
-- OpenRouter-first chat with optional Ollama (`qwen3:8b`) fallback, local `nomic-embed-text` and Qdrant.
+- Local-first chat using Ollama (`qwen3:8b`) by default, OpenRouter image/PDF analysis, local `nomic-embed-text` and Qdrant. OpenRouter chat remains an explicit provider opt-in.
 - Tavily/Brave **explicit C# web tool** registered via `AIFunctionFactory`, selected by the model only for public, current facts. Provider status endpoint, development smoke test and clear instructions when the API key is absent.
 - Qdrant file listing, per-document deletion (vectors + text payload), and **same-filename re-indexing that deletes stale chunks**. Handles legacy points indexed before v5 (grouped by `source`).
 - Chat-history deletion from browser state, plus best-effort deletion of the app's in-memory session registry reference. **This does not purge upstream hosted-model logs or telemetry**.
@@ -50,7 +50,7 @@ $env:ASPNETCORE_ENVIRONMENT = 'Development'
 4. Run `scripts/test-web-search.ps1 -ProbeAgent` from another terminal. Its first test probes Tavily without an LLM; the second checks whether the MAF model actually called `SearchWeb`. If the first works but the second doesn't, try a tool-calling-compatible model and check agent instructions.
 5. Test question: “Find current official Microsoft Agent Framework web-search documentation and cite two URLs.”
 
-For OpenRouter chat, set `OPENROUTER_API_KEY` in the same backend terminal. If absent, `Twin:Provider=auto` selects your installed Ollama model.
+An OpenRouter key enables image/PDF analysis without changing the default local chat provider. To explicitly use OpenRouter for chat, set `Twin:Provider=openrouter` (or `auto`) and set `OPENROUTER_API_KEY` in the backend process.
 
 ## Run locally
 
