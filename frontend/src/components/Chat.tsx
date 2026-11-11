@@ -6,12 +6,13 @@ import type { Message } from '../lib/api';
 import ImageGenerator from './ImageGenerator';
 
 type Props = {
-  messages: Message[]; busy: boolean; onSend: (text: string, files: File[]) => void;
+  messages: Message[]; busy: boolean; onSend: (text: string, files: File[], allowExternalAnalysis: boolean) => void;
   onStop: () => void; onExport: (content: string, format: 'md' | 'pdf' | 'pptx' | 'svg' | 'png') => void;
   draft: string; setDraft: (draft: string) => void; onReview: (content: string) => void;
 };
 export default function Chat({ messages, busy, onSend, onStop, onExport, draft, setDraft, onReview }: Props) {
   const [files, setFiles] = useState<File[]>([]);
+  const [allowExternalAnalysis, setAllowExternalAnalysis] = useState(false);
   const [knowledge, setKnowledge] = useState(false);
   const [showImageGenerator, setShowImageGenerator] = useState(false);
   const end = useRef<HTMLDivElement>(null);
@@ -23,8 +24,8 @@ export default function Chat({ messages, busy, onSend, onStop, onExport, draft, 
   }, [messages, busy]);
   const submit = (e?: FormEvent) => {
     e?.preventDefault(); if (busy || (!draft.trim() && !files.length)) return;
-    onSend(knowledge ? `Use SearchKnowledge when relevant. ${draft.trim()}` : draft.trim(), files);
-    setDraft(''); setFiles([]); if (picker.current) picker.current.value = '';
+    onSend(knowledge ? `Use SearchKnowledge when relevant. ${draft.trim()}` : draft.trim(), files, allowExternalAnalysis);
+    setDraft(''); setFiles([]); setAllowExternalAnalysis(false); if (picker.current) picker.current.value = '';
   };
   const lastAnswer = [...messages].reverse().find(m => m.role === 'assistant' && !m.error)?.text;
   return <div className="chat-page">
@@ -60,9 +61,10 @@ export default function Chat({ messages, busy, onSend, onStop, onExport, draft, 
       {lastAnswer && <div className="exports"><button type="button" onClick={() => onReview(lastAnswer)}>Request review</button><span><Download size={13}/> Export last answer:</span>{(['md','pdf','pptx','png','svg'] as const).map(f => <button type="button" key={f} onClick={() => onExport(lastAnswer, f)}>{f.toUpperCase()}</button>)}</div>}
       <form className="composer" onSubmit={submit} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); setFiles(current => [...current,...Array.from(e.dataTransfer.files)].slice(0,6)); }}>
         {!!files.length && <div className="attachment-tags">{files.map((file,i) => <span key={i}><FileText size={12}/>{file.name}<button type="button" aria-label="Remove attachment" onClick={() => setFiles(files.filter((_,n) => n!==i))}><X size={12}/></button></span>)}</div>}
+        {!!files.length && <label className="external-analysis-option"><input type="checkbox" checked={allowExternalAnalysis} onChange={e => setAllowExternalAnalysis(e.target.checked)}/> Allow external analysis of scanned PDFs and images in this message</label>}
         <textarea value={draft} rows={2} placeholder="Ask about your code, business documents, errors or project..." onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }} />
         <div className="composer-bottom">
-          <div className="composer-tools"><input ref={picker} type="file" multiple accept=".pdf,.txt,.md,.cs,.js,.ts,.tsx,.json,.xml,.sql,.html,.css,.csv,.png,.jpg,.jpeg,.webp" hidden onChange={e => setFiles(current => [...current, ...Array.from(e.target.files ?? [])].slice(0,6))}/>
+          <div className="composer-tools"><input ref={picker} type="file" multiple accept=".pdf,.docx,.txt,.md,.cs,.js,.jsx,.ts,.tsx,.json,.xml,.sql,.html,.css,.csv,.png,.jpg,.jpeg,.webp" hidden onChange={e => setFiles(current => [...current, ...Array.from(e.target.files ?? [])].slice(0,6))}/>
             <button type="button" className="tool-button" onClick={() => picker.current?.click()}><Paperclip size={16}/> Attach</button>
             <button type="button" className="tool-button" onClick={() => setShowImageGenerator(value => !value)}><Sparkles size={16}/> Generate image</button>
             <label className="knowledge-switch"><input type="checkbox" checked={knowledge} onChange={e => setKnowledge(e.target.checked)}/><span>Use knowledge</span></label>

@@ -40,7 +40,9 @@ builder.Services.AddSingleton(settings);
 builder.Services.AddSingleton(projectCatalog);
 builder.Services.AddSingleton(workspace);
 builder.Services.AddSingleton(knowledge);
+builder.Services.AddKnowledgeRetrieval(settings);
 builder.Services.AddSingleton(vision);
+builder.Services.AddSingleton<DocumentExtractionService>();
 builder.Services.AddSingleton(search);
 builder.Services.AddSingleton(approvals);
 builder.Services.AddSingleton(handoffs);
@@ -121,7 +123,7 @@ and official URLs where relevant, and say when requested information is unavaila
 """)
 .WithAITool(AIFunctionFactory.Create(workspace.ListProject))
 .WithAITool(AIFunctionFactory.Create(workspace.ReadFile))
-.WithAITool(AIFunctionFactory.Create(knowledge.SearchKnowledge))
+.WithAITool(sp => AIFunctionFactory.Create(sp.GetRequiredService<KnowledgeRetrievalService>().SearchKnowledge))
 .WithAITool(AIFunctionFactory.Create(search.SearchWeb))
 .WithAITool(AIFunctionFactory.Create(handoffs.ProposeHandoff))
 .WithInMemorySessionStore();

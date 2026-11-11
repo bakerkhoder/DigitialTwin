@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -7,7 +6,8 @@ using System.Text.Json;
 
 namespace DigitalTwin.Api;
 
-public sealed record KnowledgeDocument(string Id, string Source, int Chunks, string Revision, string? IndexedAtUtc);
+public sealed record KnowledgeDocument(string Id, string Source, int Chunks, string Revision, string? IndexedAtUtc, string Status = "active");
+public sealed record KnowledgeIngestResult(int Chunks, bool Unchanged, string Revision, string Status);
 
 /// <summary>
 /// Qdrant is the source of truth for indexed passages. A document's identity is its
@@ -57,7 +57,7 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
             new { vectors = new { size = settings.EmbeddingDimensions, distance = "Cosine" } }, ct);
         res.EnsureSuccessStatusCode();
     }
-    private sealed record IndexedPoint(string Id, string Source, string Revision, string? IndexedAtUtc);
+    private sealed record IndexedPoint(string Id, string Source, string Revision, string? IndexedAtUtc, string Status, string Pipeline);
 
     // Scroll ALL pages; returning just the first page would leak stale/unlisted documents.
     private async Task<List<IndexedPoint>> Scroll(string? source, CancellationToken ct)
@@ -90,7 +90,9 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
                 if (string.IsNullOrWhiteSpace(name)) continue;
                 all.Add(new IndexedPoint(point.GetProperty("id").ToString(), name,
                     payload.TryGetProperty("revision", out var revision) ? revision.GetString() ?? "legacy" : "legacy",
-                    payload.TryGetProperty("indexedAtUtc", out var when) ? when.GetString() : null));
+                    payload.TryGetProperty("indexedAtUtc", out var when) ? when.GetString() : null,
+                    payload.TryGetProperty("status", out var status) ? status.GetString() ?? "active" : "active",
+                    payload.TryGetProperty("pipeline", out var pipeline) ? pipeline.GetString() ?? "" : ""));
             }
             offset = result.TryGetProperty("next_page_offset", out var next) && next.ValueKind != JsonValueKind.Null
                 ? next.Clone() : null;
@@ -104,7 +106,8 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
         return points.GroupBy(p => p.Source, StringComparer.Ordinal).Select(g =>
             new KnowledgeDocument(DocumentId(g.Key), g.Key, g.Count(),
                 g.OrderByDescending(p => p.IndexedAtUtc).First().Revision,
-                g.Max(p => p.IndexedAtUtc))).OrderBy(x => x.Source, StringComparer.OrdinalIgnoreCase).ToArray();
+                g.Max(p => p.IndexedAtUtc),
+                g.Any(p => p.Status == "deprecated") ? "deprecated" : "active")).OrderBy(x => x.Source, StringComparer.OrdinalIgnoreCase).ToArray();
     }
     private async Task DeletePointIds(IEnumerable<string> pointIds, CancellationToken ct)
     {
@@ -127,58 +130,85 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
         }
         finally { _mutation.Release(); }
     }
-    public async Task<int> Ingest(string source, string text, CancellationToken ct)
+    public async Task<bool> SetDocumentStatus(string id, string status, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("Document is empty.");
-        source = Path.GetFileName(source);
-        if (string.IsNullOrWhiteSpace(source)) throw new ArgumentException("Missing document name.");
-        using var activity = DeveloperTwinTelemetry.Activities.StartActivity("knowledge.ingest");
-        var health = await Health(ct);
-        if (!health.Qdrant || !health.Ollama) throw new InvalidOperationException(health.Message);
-        // Compute embeddings BEFORE touching indexed content. If the model fails,
-        // the previous indexed revision remains intact.
-        const int size = 1100, overlap = 160;
-        var chunks = new List<string>();
-        for (int i = 0; i < text.Length && chunks.Count < 300; i += size - overlap)
-            chunks.Add(text.Substring(i, Math.Min(size, text.Length - i)));
-        var revision = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
-        var indexedAt = DateTimeOffset.UtcNow.ToString("O");
-        var points = new List<(string Id, object Point)>();
-        for (int i = 0; i < chunks.Count; i++)
-        {
-            var vector = await Embed(chunks[i], ct);
-            if (vector.Length != settings.EmbeddingDimensions)
-                throw new InvalidOperationException($"Embedding dimension mismatch: expected {settings.EmbeddingDimensions}, got {vector.Length}.");
-            // Deterministic UUID for same document, revision and chunk = retry-safe.
-            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(source + "|" + revision + "|" + i));
-            var id = new Guid(bytes.AsSpan(0, 16)).ToString();
-            points.Add((id, new
-            {
-                id,
-                vector,
-                payload = new
-                {
-                    source,
-                    documentId = DocumentId(source),
-                    revision,
-                    indexedAtUtc = indexedAt,
-                    text = chunks[i],
-                    chunk = i
-                }
-            }));
-        }
+        if (status is not ("active" or "deprecated")) throw new ArgumentException("Status must be active or deprecated.");
         await _mutation.WaitAsync(ct);
         try
         {
+            var matched = (await Scroll(null, ct)).Where(p => DocumentId(p.Source) == id).ToArray();
+            if (matched.Length == 0) return false;
+            // One server-side filter updates all chunks, including legacy points.
+            using var response = await http.PostAsJsonAsync($"{CollectionPath}/points/payload?wait=true", new
+            {
+                payload = new { status, statusChangedAtUtc = DateTimeOffset.UtcNow.ToString("O") },
+                filter = new { must = new[] { new { key = "source", match = new { value = matched[0].Source } } } }
+            }, ct);
+            response.EnsureSuccessStatusCode();
+            return true;
+        }
+        finally { _mutation.Release(); }
+    }
+
+    public async Task<KnowledgeIngestResult> Ingest(string source, string text, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("Document is empty.");
+        if (text.Length > TextExtractor.MaxCharacters)
+            throw new ArgumentException($"Document exceeds {TextExtractor.MaxCharacters:N0} extracted characters. Split it into smaller documents.");
+        source = Path.GetFileName(source);
+        if (string.IsNullOrWhiteSpace(source)) throw new ArgumentException("Missing document name.");
+        using var activity = DeveloperTwinTelemetry.Activities.StartActivity("knowledge.ingest");
+        const int size = 1100, overlap = 160;
+        var chunks = new List<string>();
+        for (int i = 0; i < text.Length; i += size - overlap)
+        {
+            chunks.Add(text.Substring(i, Math.Min(size, text.Length - i)));
+            if (i + size >= text.Length) break;
+        }
+        var revision = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+        // Re-index once when changing embedding models/dimensions or chunking rules.
+        var pipeline = $"chunks-v2|{settings.EmbeddingModel}|{settings.EmbeddingDimensions}";
+        var indexedAt = DateTimeOffset.UtcNow.ToString("O");
+        var newIds = Enumerable.Range(0, chunks.Count).Select(i => new Guid(
+            SHA256.HashData(Encoding.UTF8.GetBytes($"{source}|{revision}|{pipeline}|{i}")).AsSpan(0, 16)).ToString()).ToArray();
+        // Keep revision checks and writes under one gate so concurrent uploads cannot
+        // both embed the same revision or accidentally reactivate deprecated content.
+        await _mutation.WaitAsync(ct);
+        try
+        {
+            var previous = await Scroll(source, ct);
+            var status = previous.Any(p => p.Status == "deprecated") ? "deprecated" : "active";
+            var oldIds = previous.Select(x => x.Id).ToHashSet();
+            if (previous.Count == chunks.Count && previous.All(p => p.Revision == revision && p.Pipeline == pipeline)
+                && oldIds.SetEquals(newIds))
+            {
+                activity?.SetTag("knowledge.unchanged", true);
+                return new(chunks.Count, true, revision, status);
+            }
+            // All embeddings must succeed before any indexed content is changed.
+            var points = new List<object>();
+            for (int i = 0; i < chunks.Count; i++)
+            {
+                var vector = await Embed(chunks[i], ct);
+                if (vector.Length != settings.EmbeddingDimensions || vector.Any(v => !float.IsFinite(v)))
+                    throw new InvalidOperationException($"Embedding must contain {settings.EmbeddingDimensions} finite dimensions.");
+                points.Add(new
+                {
+                    id = newIds[i], vector,
+                    payload = new
+                    {
+                        source, documentId = DocumentId(source), revision, indexedAtUtc = indexedAt,
+                        text = chunks[i], chunk = i, status, pipeline, trustLevel = "user-uploaded"
+                    }
+                });
+            }
             await EnsureCollection(ct);
-            var oldIds = (await Scroll(source, ct)).Select(x => x.Id).ToHashSet();
-            var newIds = points.Select(x => x.Id).ToHashSet();
             try
             {
                 foreach (var batch in points.Chunk(25))
                 {
                     using var response = await http.PutAsJsonAsync($"{CollectionPath}/points?wait=true",
-                        new { points = batch.Select(x => x.Point).ToArray() }, ct);
+                        new { points = batch }, ct);
                     response.EnsureSuccessStatusCode();
                 }
             }
@@ -192,51 +222,46 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
             // Remove every previous point, including legacy source+chunk IDs and
             // extra chunks left by shorter replacements. No old version survives.
             await DeletePointIds(oldIds.Except(newIds), ct);
+            activity?.SetTag("knowledge.chunks", chunks.Count);
+            activity?.SetTag("knowledge.unchanged", false);
+            DeveloperTwinTelemetry.KnowledgeChunks.Add(chunks.Count);
+            return new(chunks.Count, false, revision, status);
         }
         finally { _mutation.Release(); }
-        activity?.SetTag("knowledge.chunks", chunks.Count);
-        DeveloperTwinTelemetry.KnowledgeChunks.Add(chunks.Count);
-        return chunks.Count;
     }
 
-    [Description(
-        "Search ALL indexed user-uploaded knowledge using " +
-        "semantic similarity. Includes business documents, " +
-        "ERP requirements, technical notes, policies, " +
-        "personal profiles, hobbies, names, preferences, " +
-        "and any other authorized uploaded information. " +
-        "Call this tool when answering questions about " +
-        "the user's uploaded files. Return grounded " +
-        "information and cite the source filename. " +
-        "Do not invent missing information."
-    )]
-    public async Task<string> SearchKnowledge(
-            [Description("Required natural-language question about uploaded documents, maximum 500 characters.")] string query,
-            [Description("Maximum passages to return, 1 to 5, default 5.")] int maxResults = 5)
-    {
-        using var telemetry = DeveloperTwinTelemetry.BeginTool("SearchKnowledge");
-        if (string.IsNullOrWhiteSpace(query) || query.Length > 500 || maxResults is < 1 or > 5)
-        {
-            telemetry.Fail("invalid_request");
-            return JsonSerializer.Serialize(new { error = "query must be 1–500 characters and maxResults 1–5." });
-        }
-        try { return JsonSerializer.Serialize(await Search(query, CancellationToken.None, maxResults)); }
-        catch { telemetry.Fail(); throw; }
-    }
-    public async Task<IReadOnlyList<KnowledgeHit>> Search(string query, CancellationToken ct, int maxResults = 5)
+    public async Task<IReadOnlyList<KnowledgeHit>> SearchCandidates(string query, CancellationToken ct, int candidateCount = 10)
     {
         using var activity = DeveloperTwinTelemetry.Activities.StartActivity("knowledge.retrieve");
-        var health = await Health(ct);
-        if (!health.Qdrant || !health.Ollama) throw new InvalidOperationException(health.Message);
+        if (string.IsNullOrWhiteSpace(query) || query.Length > 500 || candidateCount is < 1 or > 50)
+            throw new ArgumentException("Invalid knowledge search query or candidate count.");
         if (!await CollectionExists(ct)) return [];
         var vector = await Embed(query, ct);
+        if (vector.Length != settings.EmbeddingDimensions || vector.Any(v => !float.IsFinite(v)))
+            throw new InvalidOperationException($"Embedding must contain {settings.EmbeddingDimensions} finite dimensions.");
+        // Apply lifecycle filtering inside Qdrant BEFORE selecting top candidates.
+        // Missing status means active for compatibility with the existing library.
+        var filter = new { should = new object[]
+        {
+            new { key = "status", match = new { value = "active" } },
+            new { is_empty = new { key = "status" } }
+        } };
         using var response = await http.PostAsJsonAsync($"{CollectionPath}/points/search",
-            new { vector, limit = Math.Clamp(maxResults, 1, 5), score_threshold = Math.Clamp(settings.KnowledgeMinScore, 0, 1), with_payload = true }, ct);
+            new { vector, limit = candidateCount, score_threshold = settings.KnowledgeMinScore, with_payload = true, filter }, ct);
         response.EnsureSuccessStatusCode();
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-        return json.RootElement.GetProperty("result").EnumerateArray().Select(p => new KnowledgeHit(
-            p.GetProperty("payload").GetProperty("source").GetString() ?? "unknown",
-            p.GetProperty("payload").GetProperty("text").GetString() ?? "",
-            p.GetProperty("score").GetDouble())).ToArray();
+        var hits = new List<KnowledgeHit>();
+        foreach (var p in json.RootElement.GetProperty("result").EnumerateArray())
+        {
+            var payload = p.GetProperty("payload");
+            if (payload.TryGetProperty("status", out var status) && status.ValueKind == JsonValueKind.String && status.GetString() != "active") continue;
+            var source = payload.GetProperty("source").GetString() ?? "unknown";
+            hits.Add(new(source, payload.GetProperty("text").GetString() ?? "", p.GetProperty("score").GetDouble(),
+                p.GetProperty("id").ToString(), DocumentId(source),
+                payload.TryGetProperty("revision", out var revision) ? revision.GetString() ?? "legacy" : "legacy",
+                payload.TryGetProperty("chunk", out var chunk) ? chunk.GetInt32() : 0, hits.Count + 1));
+        }
+        activity?.SetTag("knowledge.candidates", hits.Count);
+        return hits;
     }
 }

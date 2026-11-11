@@ -47,3 +47,14 @@
 - DT-024: Added seven fictional `.txt` knowledge documents and end-to-end demo test prompts.
 - Pending verification: Windows .NET restore/build, real Tavily or Brave response with user key, OpenRouter/ollama model actually invokes SearchWeb, knowledge retrieval quality after ingestion.
 - Security boundary: demo policies in Qdrant are NOT access-control enforcement; true policy-based HITL remains future work.
+
+## 2026-11-11 — reranking and knowledge lifecycle
+
+- Added `KnowledgeRetrievalService` and replaceable local/no-op rerankers under `AI/Retrieval`. The existing MAF `SearchKnowledge` tool retrieves ten active/legacy candidates and selects up to five after validated structured scoring. Diagnostics preserve both scores and both ranks; retrieval and reranking have separate telemetry spans.
+- Added deprecate/restore in Qdrant and the knowledge UI. Search prefilters active or missing-status payloads so legacy points remain visible. Re-upload preserves deprecated status. Delete still removes vectors and text.
+- Added revision/pipeline checks before embedding. Identical uploads skip embedding and session invalidation; legacy pipeline metadata is upgraded on the next upload. Replacements retain retry-safe point IDs and remove obsolete chunks.
+- Shared extraction now handles searchable PDF and DOCX locally. Scanned PDF/image extraction needs explicit per-upload permission before a hosted provider is used. Oversized extracted content is rejected rather than silently truncated.
+- Verification: `dotnet test tests/DigitalTwin.Api.Tests --no-restore --nologo --verbosity minimal` passed 36 regression tests (one opt-in test skipped); `npm.cmd run build` in `frontend` passed; opt-in `TWIN_RUN_LIVE_RERANK_EVAL=1` with `dotnet test tests/DigitalTwin.Api.Tests --no-build --no-restore --filter 'Category=Live' --logger 'console;verbosity=detailed'` passed separately. The three live qwen3:8b questions each promoted the expected passage to rank 1.
+- Initial cold qwen3:8b evaluation exceeded 45 seconds, so the bounded configurable timeout is now 90 seconds. The installed llama3.2:1b failed the relevance fixture and was not selected. No additional model download or paid model API was introduced.
+- Docker's Linux engine was stopped and port 6333 was unavailable. Live Qdrant integration, browser interaction and hosted OCR were not claimed as verified. See [RERANKING-AND-KNOWLEDGE-LIFECYCLE.md](RERANKING-AND-KNOWLEDGE-LIFECYCLE.md) for API details, migration behavior, exact commands and limitations.
+- Scope agreed with the user: first two phases only. Persistent memory, full guardrail/poisoning review, broader agent-registration refactoring and A2A are deferred.

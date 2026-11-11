@@ -17,11 +17,23 @@ public sealed class TwinSettings
     public int EmbeddingDimensions { get; set; } = 768;
     // Cosine similarity threshold (0..1). Calibrate with the installed embedding model.
     public double KnowledgeMinScore { get; set; } = 0.30;
+    public int KnowledgeCandidateCount { get; set; } = 10;
+    public RerankingSettings Reranking { get; set; } = new();
     public string QdrantUrl { get; set; } = "http://127.0.0.1:6333";
     public string Collection { get; set; } = "developer_knowledge";
     public string[] AllowedProjectRoots { get; set; } = [];
 }
 
-public sealed record KnowledgeHit(string Source, string Text, double Score);
+public sealed class RerankingSettings
+{
+    // Reuse the installed local chat model. No hosted API or additional download.
+    public string Provider { get; set; } = "ollama";
+    public string Model { get; set; } = "";
+    public int TimeoutSeconds { get; set; } = 90;
+}
+
+public sealed record KnowledgeHit(string Source, string Text, double Score,
+    string Id = "", string DocumentId = "", string Revision = "", int Chunk = 0,
+    int VectorRank = 0, double? RerankScore = null, int Rank = 0);
 public sealed record ProposedAction(Guid Id, string Kind, string Summary, string Payload, DateTimeOffset CreatedAt);
 public sealed record HandoffDraft(string Title, string Content);

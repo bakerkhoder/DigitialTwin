@@ -1,7 +1,8 @@
 export type ProviderStatus = { provider: string; chatModel: string; fallback: string; visionModel: string; visionProvider?: string; pdfAnalysisProvider?: string; openRouterApiKeyConfigured?: boolean; embeddings: string; webSearch: string };
 export type KnowledgeHealth = { qdrant: boolean; ollama: boolean; message: string };
-export type KnowledgeDocument = { id: string; source: string; chunks: number; revision: string; indexedAtUtc?: string | null };
-export type KnowledgeHit = { source: string; text: string; score: number };
+export type KnowledgeDocument = { id: string; source: string; chunks: number; revision: string; indexedAtUtc?: string | null; status: 'active' | 'deprecated' };
+export type KnowledgeHit = { source: string; text: string; score: number; id: string; documentId: string; revision: string; chunk: number; vectorRank: number; rerankScore: number | null; rank: number };
+export type KnowledgeSearchResult = { candidates: KnowledgeHit[]; hits: KnowledgeHit[]; reranker: string; fallbackUsed: boolean; warning: string | null };
 export type Approval = { id: string; kind: string; summary: string; payload: string; createdAt: string };
 export type FolderScanResult = { project: string; name: string; tree: string };
 export type Message = { role: 'user' | 'assistant'; text: string; attachments?: string[]; error?: boolean };

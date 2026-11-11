@@ -31,11 +31,11 @@ public sealed class VisionTools(HttpClient http, TwinSettings settings)
         return await SendOpenRouterAsync(payload, key, "PDF analysis", ct);
     }
 
-    public async Task<string> Describe(string filePath, string question, CancellationToken ct)
+    public async Task<string> Describe(string filePath, string question, CancellationToken ct, bool allowExternalAnalysis = true)
     {
         // Unlike text chat, qwen3:8b is not a vision model. Do not send images to it.
         var key = settings.OpenRouterApiKey;
-        if (!string.IsNullOrWhiteSpace(key))
+        if (allowExternalAnalysis && !string.IsNullOrWhiteSpace(key))
         {
             var bytes = await File.ReadAllBytesAsync(filePath, ct);
             var mime = Path.GetExtension(filePath).ToLowerInvariant() switch
@@ -56,7 +56,7 @@ public sealed class VisionTools(HttpClient http, TwinSettings settings)
 
         if (string.IsNullOrWhiteSpace(settings.VisionModel))
             throw new VisionConfigurationException(
-                "No image-analysis provider is configured. Set Twin:OpenRouterApiKey or OPENROUTER_API_KEY to use Twin:OpenRouterVisionModel (default: openrouter/free), or set Twin:VisionModel to an installed vision-capable Ollama model.");
+                "No permitted image-analysis provider is configured. Set Twin:VisionModel to an installed local vision model, or enable external analysis for this upload and configure OpenRouter.");
         var image = await File.ReadAllBytesAsync(filePath, ct);
         try
         {

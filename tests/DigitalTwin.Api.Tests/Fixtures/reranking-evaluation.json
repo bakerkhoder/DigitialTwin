@@ -1,0 +1,19 @@
+{
+  "passages": [
+    { "source": "workspace-layout.txt", "text": "Imported projects live under data/workspace/projects. Uploads and generated reports have separate folders." },
+    { "source": "project-access-rules.txt", "text": "A folder outside AllowedProjectRoots requires explicit human approval before inspection. The agent cannot approve the folder itself." },
+    { "source": "upload-limits.txt", "text": "Knowledge uploads accept at most 15 files per batch, each no larger than 8 MB. PDF and DOCX text is extracted locally." },
+    { "source": "canonical-paths.txt", "text": "Before reading a file, resolve its canonical path and ensure it remains within the approved project root. Reject symbolic links." },
+    { "source": "knowledge-search.txt", "text": "Knowledge search embeds the question, retrieves vector candidates from Qdrant, and reranks them before supplying evidence to the agent." },
+    { "source": "document-lifecycle.txt", "text": "Deprecated documents remain stored for restoration but are excluded from normal knowledge retrieval. Restore changes their status to active." },
+    { "source": "embedding-reuse.txt", "text": "Uploading identical text under the same filename and unchanged embedding configuration returns unchanged and skips generating new embeddings." },
+    { "source": "pdf-ingestion.txt", "text": "Searchable PDFs are extracted locally with page references. A scanned PDF requires OCR and explicit upload consent before using an external PDF provider." },
+    { "source": "report-export.txt", "text": "Handoff answers can be exported to Markdown, PDF, PowerPoint, SVG and PNG after review." },
+    { "source": "chat-provider.txt", "text": "The default chat provider is local Ollama using an installed qwen3:8b model. Hosted chat is separately configured." }
+  ],
+  "questions": [
+    { "query": "What happens when a project folder is outside AllowedProjectRoots?", "expectedSource": "project-access-rules.txt" },
+    { "query": "Can a scanned PDF be sent to an external provider without asking?", "expectedSource": "pdf-ingestion.txt" },
+    { "query": "Does uploading an identical document generate embeddings again?", "expectedSource": "embedding-reuse.txt" }
+  ]
+}

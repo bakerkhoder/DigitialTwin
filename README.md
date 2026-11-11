@@ -2,6 +2,8 @@
 
 # DeveloperTwin AI v4 — engineering agent (MAF + React)
 
+Reranking and knowledge lifecycle are documented in [docs/RERANKING-AND-KNOWLEDGE-LIFECYCLE.md](docs/RERANKING-AND-KNOWLEDGE-LIFECYCLE.md): local top-10 retrieval/reranking, ranking diagnostics, deprecate/restore, unchanged-upload detection, and local PDF/DOCX extraction.
+
 **Goal:** A teachable local-first engineering assistant. Inspect ZIP projects or explicitly approved folders, ask a hosted Microsoft Agent Framework agent to explain them, use a RAG knowledge base, and export useful technical handoffs as **Markdown, PDF, PPTX, SVG or PNG**. The Approval Center gates folder scans and handoff exports (not Azure DevOps).
 
 > **Training sample, not production-ready.** The .NET and React build still needs to be verified on the user's Windows machine. Do not expose to a LAN/public endpoint or ingest unapproved confidential code into OpenRouter.
