@@ -60,7 +60,7 @@ flowchart TB
 | Typed tools | `AIFunctionFactory.Create(...)` | Register deterministic C# methods callable by the model | Day 2 |
 | `AgentSession` | `SessionRegistry` | Retain context within one server instance; semaphore serializes turns | Day 3 |
 | Vector RAG | `KnowledgeStore` | Text chunks, embeddings, Qdrant indexing/retrieval | Extended capstone objective |
-| Workspace tools | `WorkspaceTools` | Read/list files from permitted project directories; never run them | Day 2 tools |
+| Workspace tools | `WorkspaceTools` | Safely list, selectively read, and prepare evidence from connected projects; never run them | Day 2 tools |
 | Chat provider selection | `Program.cs`, `HostedFirstChatClient` | Local `qwen3:8b` by default; OpenRouter chat is an explicit provider opt-in. Vision/PDF analysis has a separate OpenRouter path. | Provider abstraction |
 | Human review | `HandoffTools`, `ApprovalQueue` | Proposal awaiting explicit approval | Intro to HITL; NOT yet native MAF workflows |
 | Web search | `WebSearchTools` | Current public docs from Tavily/Brave, separate from local proprietary files | Tool extension |
@@ -73,7 +73,7 @@ flowchart TB
 2. **`Models/TwinSettings.cs`**: typed, documented configuration. Folders under `AllowedProjectRoots` connect directly; outside folders require Approval Center review and an explicit per-folder grant. OpenRouter key comes from environment.
 3. **`Agents/HostedFirstChatClient.cs`**: used only when hosted chat is explicitly selected with local fallback enabled; it tries OpenRouter first. Default chat stays local. Do not silently send confidential project material to cloud.
 4. **`Agents/SessionRegistry.cs`**: `ConcurrentDictionary` maps `sessionId` to `AgentSession`; `SemaphoreSlim` prevents simultaneous mutations to the same conversation. This is in-memory only.
-5. **`Services/WorkspaceTools.cs`**: safe path resolution, symlink blocking, file extensions, limited tree depth and read size.
+5. **`Services/WorkspaceTools.cs`**: safe path resolution, symlink blocking, and read-only project inspection. Project analysis sends a bounded tree plus selected real source/configuration contents to the agent; reports must cite those files and identify unsupported conclusions instead of guessing.
 6. **`Services/ProjectCatalog.cs`**: controlled absolute folder paths; configured roots connect directly, while explicitly approved outside folders are revalidated and persisted as narrowly scoped linked IDs. No shell commands.
 7. **`Services/ProjectImporter.cs`**: ZIP guardrails and extraction to inert data outside compilation.
 8. **`Services/KnowledgeStore.cs`**: local embeddings, Qdrant collection and query. The source/payload is the provenance mechanism.

@@ -131,7 +131,7 @@ Existing v3 imported-project directories under `src/DigitalTwin.Api/workspace/` 
 ## 6. Handoff export example
 
 1. Import/link a project and click **Ask agent to analyze this project**.
-2. Let the agent inspect the project with `ListProject` and `ReadFile`.
+2. The backend builds a bounded tree and reads selected real source/configuration files before asking the agent to analyze them. The report should cite those paths and mark unsupported details as unverified; it does not execute or build the project.
 3. When its Markdown report is complete, use **MD / PDF / PPTX / PNG / SVG** above the chat input.
 4. For the approval demonstration, click **Request review** above chat, or ask: **“Propose this handoff for approval. The title is ProcureStudio onboarding. Include architecture, dependencies, setup, security notes, and risks.”**
 5. Open **Approvals**, preview and approve/reject. Approval generates a PDF download (no email or external publishing).

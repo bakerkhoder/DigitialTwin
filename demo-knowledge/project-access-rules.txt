@@ -1,0 +1,6 @@
+A short, fictional DeveloperTwin policy:
+- Projects inside configured AllowedProjectRoots may be inspected read-only.
+- Projects outside approved roots require human approval before inspection.
+- Every approval request should include the target path, purpose and requested operation.
+- Denied requests must not proceed.
+- Approval for reading never grants permission to execute or modify source code.

@@ -2,13 +2,13 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { FolderGit2, FolderOpen, UploadCloud, FileArchive, ShieldCheck, AlertCircle, ArrowRight, Search } from 'lucide-react';
 import { api, type FolderScanResult } from '../lib/api';
 type Props = {
-  onAsk: (text: string) => void;
+  onAnalyzeProject: (projectPath: string) => void;
   activity: (title: string, detail: string) => void;
   onApprovalRequested: () => void;
   openApprovals: () => void;
   initialProject: FolderScanResult | null;
 };
-export default function Projects({ onAsk, activity, onApprovalRequested, openApprovals, initialProject }: Props) {
+export default function Projects({ onAnalyzeProject, activity, onApprovalRequested, openApprovals, initialProject }: Props) {
   const [zip, setZip] = useState<File | null>(null);
   const [folder, setFolder] = useState('');
   const [path, setPath] = useState('');
@@ -60,7 +60,7 @@ export default function Projects({ onAsk, activity, onApprovalRequested, openApp
     <div className="help-banner"><ShieldCheck size={18}/><div><strong>Read-only by design</strong><p>Folders under <code>Twin:AllowedProjectRoots</code> keep their direct-connect behavior. Outside folders appear in the Approval Center; approval grants access only to that requested folder.</p></div></div>
     {approvalNotice && <div className="help-banner approval-notice" role="status"><ShieldCheck size={18}/><div><strong>Approval required</strong><p>{approvalNotice}</p><button className="secondary" type="button" onClick={openApprovals}>Open Approval Center <ArrowRight size={15}/></button></div></div>}
     <section className="panel"><div className="panel-title"><h2>Project explorer</h2><span>Safe text-only inspection</span></div><div className="search-row"><FolderGit2 size={17}/><input value={path} onChange={e => setPath(e.target.value)} placeholder="projects/project-... or linked-..."/><button className="secondary" onClick={inspect} type="button" disabled={busy}><Search size={16}/> Scan</button></div>
-      <div className="code-tree">{tree || 'Import a project or connect a folder to view its structure here.'}</div><button className="primary" disabled={!path} onClick={() => onAsk(`Inspect project '${path}' using ListProject and ReadFile. Explain the application's purpose, technology stack, structure, major modules, data flow, external dependencies, setup, known risks and onboarding steps. Distinguish verified facts from assumptions. Please format the answer as a professional technical handoff report.`)}><ArrowRight size={16}/> Ask agent to analyze this project</button>
+      <div className="code-tree">{tree || 'Import a project or connect a folder to view its structure here.'}</div><button className="primary" disabled={!path} onClick={() => onAnalyzeProject(path)}><ArrowRight size={16}/> Ask agent to analyze this project</button>
     </section>{error && <div className="alert error-alert" role="alert"><AlertCircle size={18}/>{error}</div>}
   </div>;
 }

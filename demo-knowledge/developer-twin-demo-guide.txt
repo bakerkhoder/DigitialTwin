@@ -1,0 +1,6 @@
+A simple description of the application's capabilities:
+- DeveloperTwin uses Microsoft Agent Framework to coordinate tools.
+- SearchKnowledge retrieves information from Qdrant.
+- SearchWeb retrieves up-to-date public documentation through Exa.
+- ListProject and ReadFile inspect permitted source files.
+- Sensitive actions should require an explicit approval flow.

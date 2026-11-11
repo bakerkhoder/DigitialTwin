@@ -3,6 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace DigitalTwin.Api;
 
+public sealed record ProjectInspection(string Tree, string Evidence, IReadOnlyList<string> FilesRead);
+
 /// <summary>
 /// Strict, read-only project access plus safe Markdown output. Tool-visible paths are
 /// either inside data/workspace OR linked-ID paths resolved by ProjectCatalog.
@@ -14,6 +16,9 @@ public sealed class WorkspaceTools(TwinSettings settings, ProjectCatalog catalog
     { ".git", "node_modules", "bin", "obj", ".next", "dist", ".vs", ".idea", "coverage", "vendor", ".venv" };
     private static readonly HashSet<string> Readable = new(StringComparer.OrdinalIgnoreCase)
     { ".cs", ".csproj", ".sln", ".slnx", ".md", ".txt", ".json", ".tsx", ".ts", ".js", ".jsx", ".css", ".html", ".xml", ".yaml", ".yml", ".py", ".java", ".sql", ".props", ".config", ".toml", ".go", ".rs", ".fs", ".gradle" };
+    private const int MaxInspectionEntries = 1000;
+    private const int MaxInspectionFiles = 24;
+    private const int MaxInspectionCharacters = 32000;
     private string Resolve(string relative)
     {
         if (string.IsNullOrWhiteSpace(relative)) relative = ".";
@@ -87,6 +92,94 @@ public sealed class WorkspaceTools(TwinSettings settings, ProjectCatalog catalog
         }
         catch { toolTelemetry.Fail(); throw; }
     }
+    public ProjectInspection InspectProject(string relativePath)
+    {
+        var root = Resolve(relativePath);
+        if (!Directory.Exists(root)) throw new DirectoryNotFoundException("Project directory not found.");
+
+        var entries = new List<(string FullPath, string RelativePath, bool IsDirectory, int Depth)>();
+        void Visit(string folder, int depth)
+        {
+            if (depth > 8 || entries.Count >= MaxInspectionEntries) return;
+            foreach (var entry in Directory.EnumerateFileSystemEntries(folder).OrderBy(p => p))
+            {
+                var name = Path.GetFileName(entry);
+                if (Excluded.Contains(name) || name.StartsWith(".env", StringComparison.OrdinalIgnoreCase)) continue;
+                ProjectCatalog.GuardLinks(entry);
+                var isDirectory = Directory.Exists(entry);
+                entries.Add((entry, Path.GetRelativePath(root, entry).Replace('\\', '/'), isDirectory, depth));
+                if (isDirectory) Visit(entry, depth + 1);
+                if (entries.Count >= MaxInspectionEntries) return;
+            }
+        }
+        Visit(root, 0);
+
+        var tree = string.Join('\n', entries.Select(entry =>
+            new string(' ', entry.Depth * 2) + Path.GetFileName(entry.FullPath) + (entry.IsDirectory ? "/" : "")));
+        if (entries.Count >= MaxInspectionEntries)
+            tree += "\n[Tree truncated at the inspection safety limit.]";
+        if (string.IsNullOrWhiteSpace(tree)) tree = "[Empty folder]";
+
+        var candidates = entries
+            .Where(entry => !entry.IsDirectory && IsInspectable(entry.FullPath))
+            .OrderByDescending(entry => InspectionPriority(entry.RelativePath))
+            .ThenBy(entry => entry.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxInspectionFiles);
+        var evidence = new List<string>();
+        var filesRead = new List<string>();
+        var remaining = MaxInspectionCharacters;
+        foreach (var candidate in candidates)
+        {
+            if (remaining <= 0) break;
+            var file = new FileInfo(candidate.FullPath);
+            if (!file.Exists || file.Length > 250_000) continue;
+            ProjectCatalog.GuardLinks(candidate.FullPath);
+            var content = File.ReadAllText(candidate.FullPath);
+            if (content.Length > remaining)
+                content = content[..remaining] + "\n[File content truncated by inspection limit.]";
+            evidence.Add($"--- {candidate.RelativePath} ---\n{content}");
+            filesRead.Add(candidate.RelativePath);
+            remaining -= content.Length;
+        }
+
+        return new ProjectInspection(tree, string.Join("\n\n", evidence), filesRead);
+    }
+
+    private static bool IsInspectable(string path)
+    {
+        var name = Path.GetFileName(path);
+        var sensitivePath = path.Replace('\\', '/').Split('/').Any(segment =>
+            segment.StartsWith(".env", StringComparison.OrdinalIgnoreCase) ||
+            segment.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
+            segment.Contains("credential", StringComparison.OrdinalIgnoreCase) ||
+            segment.EndsWith(".user", StringComparison.OrdinalIgnoreCase));
+        return !sensitivePath && Readable.Contains(Path.GetExtension(path)) &&
+               !name.Contains("secret", StringComparison.OrdinalIgnoreCase) &&
+               !name.Contains("credential", StringComparison.OrdinalIgnoreCase) &&
+               !name.EndsWith(".user", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int InspectionPriority(string path)
+    {
+        var name = Path.GetFileName(path);
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        if (name.Equals("README.md", StringComparison.OrdinalIgnoreCase) || name.Equals("README", StringComparison.OrdinalIgnoreCase)) return 100;
+        if (extension is ".sln" or ".slnx") return 95;
+        if (extension is ".csproj" or ".fsproj" or ".vbproj" || name.Equals("package.json", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("pyproject.toml", StringComparison.OrdinalIgnoreCase) || name.Equals("Cargo.toml", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("go.mod", StringComparison.OrdinalIgnoreCase)) return 90;
+        if (name.Equals("Program.cs", StringComparison.OrdinalIgnoreCase) || name.Equals("Startup.cs", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("main.py", StringComparison.OrdinalIgnoreCase) || name.Equals("app.py", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("main.go", StringComparison.OrdinalIgnoreCase) || name.Equals("main.rs", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("Program.java", StringComparison.OrdinalIgnoreCase) || name.Equals("App.tsx", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("index.ts", StringComparison.OrdinalIgnoreCase) || name.Equals("index.js", StringComparison.OrdinalIgnoreCase)) return 80;
+        if (name.Equals("global.json", StringComparison.OrdinalIgnoreCase) || name.Equals("Directory.Build.props", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("tsconfig.json", StringComparison.OrdinalIgnoreCase) || name.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("docker-compose.yml", StringComparison.OrdinalIgnoreCase)) return 70;
+        if (name.StartsWith("README.", StringComparison.OrdinalIgnoreCase) || extension is ".md" or ".sql" or ".json") return 60;
+        return 40;
+    }
+
     public string ExportMarkdown(string filename, string text)
     {
         if (!Regex.IsMatch(filename, "^[a-zA-Z0-9_-]{1,80}\\.md$")) throw new ArgumentException("Use a simple .md filename.");

@@ -140,7 +140,7 @@ export default function App() {
     try { await Promise.all(ids.map(id => api<void>(`/api/agent/sessions/${id}`, { method: 'DELETE' }).catch(() => {}))); }
     finally { setHistoryDeleting(false); }
   };
-  const send = async (text:string, files:File[]) => {
+  const send = async (text:string, files:File[], projectPath?:string) => {
     const id = activeRef.current;
     if (controllers.current.has(id)) return;
     const abort = new AbortController();
@@ -155,6 +155,8 @@ export default function App() {
         const form = new FormData(); form.append('sessionId',id); form.append('message',text);
         files.forEach(f => form.append('files',f));
         result=await api('/api/chat/attachments',{method:'POST',body:form,signal:abort.signal});
+      } else if (projectPath) {
+        result=await api('/api/agent/analyze-project',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id,project:projectPath}),signal:abort.signal});
       } else result=await api('/api/agent/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:id,message:text}),signal:abort.signal});
       if (!deletedIds.current.has(id)) updateMessages(id, ms => [...ms, { role:'assistant',text:result.reply || 'No response was generated.' }]);
       activity('Response completed', 'Agent returned a response');
@@ -183,7 +185,7 @@ export default function App() {
       })
       .catch(e=>window.alert(`Review request failed: ${(e as Error).message}`));
   };
-  const askProject = (query:string) => { setDraft(query); setView('chat'); };
+  const analyzeProject = (projectPath:string) => { void send(`Analyze the connected project ${projectPath}.`, [], projectPath); };
   const openApprovedProject = (project: FolderScanResult) => { setApprovedProject(project); setView('projects'); };
   const onFolderApprovalRequested = () => setApprovalCount(count => count + 1);
   const threadEntries = Object.entries(threads).sort((a,b) => b[1].created - a[1].created);
@@ -210,7 +212,7 @@ export default function App() {
     </aside>
     <div className="main-frame"><header className="topbar"><div className="crumb">WORKSPACE <span>/</span> <strong>{menu.find(m=>m.id===view)?.label}</strong></div><div className="top-actions"><div className="provider-pill"><span className={status ? 'online':'offline'}/>{status?.provider?.toUpperCase() ?? 'OFFLINE'} · {status?.chatModel ?? 'Disconnected'}</div><button onClick={()=>setRightVisible(!rightVisible)} aria-label="Toggle activity panel" className="ghost icon-only">{rightVisible?<PanelRightClose size={18}/>:<PanelRightOpen size={18}/>}</button></div></header>
       <main className="main-area">{storageWarning && <div className="storage-warning" role="status">{storageWarning}<button type="button" onClick={() => setStorageWarning('')}>Dismiss</button></div>}{view==='chat' ? <Chat messages={threads[active]?.messages || []} busy={busy} onSend={send} onStop={stopActive} onExport={exportAnswer} onReview={requestReview} draft={draft} setDraft={setDraft}/>
-        : view==='knowledge' ? <Knowledge activity={activity}/> : view==='projects' ? <Projects activity={activity} onAsk={askProject} onApprovalRequested={onFolderApprovalRequested} openApprovals={() => setView('approvals')} initialProject={approvedProject}/> : <Approvals activity={activity} items={approvals} loadError={approvalError} onRefresh={refreshApprovals} onProjectConnected={openApprovedProject} onQueueChanged={refreshApprovals}/>}</main>
+        : view==='knowledge' ? <Knowledge activity={activity}/> : view==='projects' ? <Projects activity={activity} onAnalyzeProject={analyzeProject} onApprovalRequested={onFolderApprovalRequested} openApprovals={() => setView('approvals')} initialProject={approvedProject}/> : <Approvals activity={activity} items={approvals} loadError={approvalError} onRefresh={refreshApprovals} onProjectConnected={openApprovedProject} onQueueChanged={refreshApprovals}/>}</main>
     </div>
     <aside className="activity-panel"><div className="activity-heading"><Activity size={17}/><strong>Agent activity</strong></div><p className="small-muted">Your operations, model and service health.</p>
       <div className="timeline">{logs.map((log,i)=><div className="timeline-item" key={log.time+i}><div className="timeline-icon">{i===0?<Sparkles size={15}/>:<Activity size={15}/>}</div><div><strong>{log.name}</strong><small>{log.detail}</small><span>{new Date(log.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></div></div>)}</div>
