@@ -122,15 +122,24 @@ public sealed class GuardrailAgentTests
     }
 
     [Fact]
-    public async Task MissingKnowledgeCitationRejectsAnswerAndDiscardsHiddenHistory()
+    public async Task MissingKnowledgeCitationAddsActualSourceAndKeepsCorrectedHistory()
     {
         var tool = Tool(() => { GuardrailContext.Required.RecordKnowledge(["policy.txt"]); return "Approval is required."; }, "SearchKnowledge");
-        using var harness = new GuardrailTestHarness((turn, _, _) => Task.FromResult(turn == 1 ? Call(turn, "SearchKnowledge") : Text("Uncited policy claim.")), [tool]);
+        using var harness = new GuardrailTestHarness((turn, messages, _) =>
+        {
+            if (turn == 1) return Task.FromResult(Call(turn, "SearchKnowledge"));
+            if (turn > 2) Assert.Contains(messages, message => message.Role == ChatRole.Assistant &&
+                message.Text.Contains("Approval is required") && message.Text.Contains("Documents consulted") && message.Text.Contains("policy.txt"));
+            return Task.FromResult(Text("Approval is required."));
+        }, [tool]);
         var before = await harness.Sessions.GetOrCreate(harness.SessionId, harness.Agent, default);
         var result = await harness.Run();
-        Assert.Contains("did not cite", result);
+        Assert.Contains("Approval is required", result);
+        Assert.Contains("Documents consulted", result);
+        Assert.Contains("policy.txt", result);
         var after = await harness.Sessions.GetOrCreate(harness.SessionId, harness.Agent, default);
-        Assert.NotSame(before, after);
+        Assert.Same(before, after);
+        await harness.Run("What did the document say?");
     }
 
     [Fact]

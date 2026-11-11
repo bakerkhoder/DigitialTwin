@@ -11,48 +11,53 @@ public sealed class GuardrailAgentRunner(TwinSettings settings, SessionRegistry 
 {
     public bool HasPrivateContext(string sessionId) => sessions.HasPrivateContext(sessionId);
     public async Task<string> RunAsync(AIAgent agent, string sessionId, string prompt, string userMessage,
-        bool privateContext, bool allowWebSearch, bool requireKnowledge, CancellationToken ct, bool allowHandoffProposal = false)
+        bool privateContext, bool allowWebSearch, bool requireKnowledge, CancellationToken ct, bool allowHandoffProposal = false,
+        string[]? attachments = null)
     {
         if (!string.IsNullOrWhiteSpace(userMessage) && input.ValidateMessage(userMessage) is { } inputError)
             throw new GuardrailViolationException("input_denied", inputError);
         var sensitiveInput = SensitiveDataPolicy.ContainsPrivateQueryData(userMessage);
         var gate = sessions.GetLock(sessionId);
         await gate.WaitAsync(ct);
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(settings.Guardrails.RunTimeoutSeconds));
-        var state = new GuardrailRunState(settings.Guardrails, allowWebSearch, requireKnowledge,
-            allowHandoffProposal, privateContext || sessions.HasPrivateContext(sessionId) || sensitiveInput,
-            timeout, () => sessions.MarkPrivate(sessionId));
-        using var scope = GuardrailContext.Enter(state);
-        if (state.HasPrivateContext) state.MarkPrivate();
         try
         {
-            var session = await sessions.GetOrCreate(sessionId, agent, timeout.Token);
-            var guarded = agent.AsBuilder()
-                .Use(runFunc: RunMiddlewareAsync, runStreamingFunc: null)
-                .Use(FunctionMiddlewareAsync)
-                .Build();
-            var localNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(settings.ChatTimeZone));
-            var datedPrompt = $"Current date/time: {localNow:yyyy-MM-dd HH:mm zzz} ({settings.ChatTimeZone}).\nLatest user request:\n{prompt}";
-            var result = await guarded.RunAsync(datedPrompt, session, cancellationToken: timeout.Token);
-            state.ThrowIfStopped();
-            if (state.DiscardSession) sessions.DiscardContext(sessionId);
-            return result.Text;
-        }
-        catch (Exception) when (state.Aborted is not null)
-        {
-            sessions.DiscardContext(sessionId);
-            throw state.Aborted;
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested && timeout.IsCancellationRequested)
-        {
-            sessions.DiscardContext(sessionId);
-            throw new GuardrailViolationException("run_timeout", "The agent reached its execution time limit. Narrow the request and try again.");
-        }
-        catch
-        {
-            sessions.DiscardContext(sessionId);
-            throw;
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(settings.Guardrails.RunTimeoutSeconds));
+            var state = new GuardrailRunState(settings.Guardrails, allowWebSearch, requireKnowledge,
+                allowHandoffProposal, privateContext || sessions.HasPrivateContext(sessionId) || sensitiveInput,
+                timeout, () => sessions.MarkPrivate(sessionId));
+            using var scope = GuardrailContext.Enter(state);
+            if (state.HasPrivateContext) state.MarkPrivate();
+            try
+            {
+                var session = await sessions.GetOrCreate(sessionId, agent, timeout.Token);
+                var guarded = agent.AsBuilder()
+                    .Use(runFunc: RunMiddlewareAsync, runStreamingFunc: null)
+                    .Use(FunctionMiddlewareAsync)
+                    .Build();
+                var localNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(settings.ChatTimeZone));
+                var datedPrompt = $"Current date/time: {localNow:yyyy-MM-dd HH:mm zzz} ({settings.ChatTimeZone}).\nLatest user request:\n{prompt}";
+                var result = await guarded.RunAsync(datedPrompt, session, cancellationToken: timeout.Token);
+                state.ThrowIfStopped();
+                await sessions.SaveTurn(sessionId, agent, session, userMessage, result.Text, attachments, state.DiscardSession, timeout.Token);
+                if (state.DiscardSession) sessions.DiscardContext(sessionId);
+                return result.Text;
+            }
+            catch (Exception) when (state.Aborted is not null)
+            {
+                sessions.DiscardUncommittedTurn(sessionId);
+                throw state.Aborted;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested && timeout.IsCancellationRequested)
+            {
+                sessions.DiscardUncommittedTurn(sessionId);
+                throw new GuardrailViolationException("run_timeout", "The agent reached its execution time limit. Narrow the request and try again.");
+            }
+            catch
+            {
+                sessions.DiscardUncommittedTurn(sessionId);
+                throw;
+            }
         }
         finally { gate.Release(); }
     }

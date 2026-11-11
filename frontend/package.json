@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test:guardrails": "node scripts/verify-guardrails.mjs",
+    "test:persistence": "node scripts/verify-persistence.mjs",
     "build:api": "tsc -b && vite build --outDir ../src/DigitalTwin.Api/wwwroot --emptyOutDir"
   },
   "dependencies": {

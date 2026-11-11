@@ -41,6 +41,13 @@ var search = new WebSearchTools(new HttpClient(), authorization);
 var approvals = new ApprovalQueue();
 var handoffs = new HandoffTools(approvals, authorization);
 builder.Services.AddSingleton(settings);
+var repositoryRoot = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", ".."));
+var stateDatabase = new LocalStateDatabase(Path.GetFullPath(settings.StateDatabase, repositoryRoot));
+builder.Services.AddSingleton(stateDatabase);
+builder.Services.AddSingleton<ConversationStore>();
+var memories = new MemoryStore(stateDatabase);
+builder.Services.AddSingleton(memories);
+builder.Services.AddSingleton<MemoryTools>();
 builder.Services.AddDeveloperTwinGuardrails(settings);
 builder.Services.AddSingleton(projectCatalog);
 builder.Services.AddSingleton(workspace);
@@ -76,6 +83,7 @@ if (hosted)
 // do not capture prompts, model responses, or tool arguments from private projects.
 // Instrument the outer client ONCE; otherwise model spans may be duplicated.
 client = new GuardrailChatClient(client, settings).AsBuilder()
+    .UseAIContextProviders(new SavedMemoryContextProvider(memories))
     .UseOpenTelemetry(sourceName: DeveloperTwinTelemetry.GenAiSourceName,
         configure: telemetry => telemetry.EnableSensitiveData = false)
     .Build();
@@ -95,6 +103,7 @@ builder.AddAIAgent("DeveloperTwin", instructions: AgentInstructions.DeveloperTwi
 .WithAITool(AIFunctionFactory.Create(workspace.ListProject))
 .WithAITool(AIFunctionFactory.Create(workspace.ReadFile))
 .WithAITool(sp => AIFunctionFactory.Create(sp.GetRequiredService<KnowledgeRetrievalService>().SearchKnowledge))
+.WithAITool(sp => AIFunctionFactory.Create(sp.GetRequiredService<MemoryTools>().SearchMemories))
 .WithAITool(AIFunctionFactory.Create(search.SearchWeb))
 .WithAITool(AIFunctionFactory.Create(handoffs.ProposeHandoff))
 .WithInMemorySessionStore();
@@ -171,7 +180,7 @@ if (app.Environment.IsDevelopment())
         return Results.Content(result, "application/json");
     });
 }
-app.MapChatEndpoints().MapKnowledgeEndpoints().MapProjectEndpoints().MapReportEndpoints().MapImageEndpoints();
+app.MapChatEndpoints().MapMemoryEndpoints().MapKnowledgeEndpoints().MapProjectEndpoints().MapReportEndpoints().MapImageEndpoints();
 app.MapFallbackToFile("index.html");
 app.Run();
 

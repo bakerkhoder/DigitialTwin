@@ -13,7 +13,7 @@ public sealed class GuardrailViolationException(string code, string message) : E
 public sealed class GuardrailRunState(GuardrailSettings limits, bool allowWebSearch, bool requireKnowledge,
     bool allowHandoff, bool privateContext, CancellationTokenSource cancellation, Action markSessionPrivate)
 {
-    private int _toolCalls, _modelCalls, _private = privateContext ? 1 : 0, _knowledgeSearches, _discardSession;
+    private int _toolCalls, _modelCalls, _private = privateContext ? 1 : 0, _knowledgeSearches, _discardSession, _knowledgeRecovery;
     private readonly ConcurrentDictionary<string, int> _repetitions = new();
     private readonly ConcurrentDictionary<string, byte> _sources = new(StringComparer.OrdinalIgnoreCase);
     private GuardrailViolationException? _aborted;
@@ -36,6 +36,7 @@ public sealed class GuardrailRunState(GuardrailSettings limits, bool allowWebSea
     public bool HasPrivateContext => Volatile.Read(ref _private) != 0;
     public int KnowledgeSearches => Volatile.Read(ref _knowledgeSearches);
     public bool DiscardSession => Volatile.Read(ref _discardSession) != 0;
+    public bool TryRecoverKnowledge() => Interlocked.CompareExchange(ref _knowledgeRecovery, 1, 0) == 0;
     public void DiscardConversationContext() => Interlocked.Exchange(ref _discardSession, 1);
     public IReadOnlyCollection<string> KnowledgeSources => _sources.Keys.ToArray();
     public GuardrailViolationException? Aborted => _aborted;

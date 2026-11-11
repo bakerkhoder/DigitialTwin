@@ -7,7 +7,10 @@ export type KnowledgeSearchResult = { candidates: KnowledgeHit[]; hits: Knowledg
 export type Approval = { id: string; kind: string; summary: string; payload: string; createdAt: string };
 export type FolderScanResult = { project: string; name: string; tree: string };
 export type Message = { role: 'user' | 'assistant'; text: string; attachments?: string[]; error?: boolean };
-export type Thread = { title: string; messages: Message[]; created: number };
+export type Thread = { title: string; messages: Message[]; created: number; updated?: number };
+export type ConversationSummary = { id: string; title: string; created: number; updated: number };
+export type ConversationDetail = ConversationSummary & { messages: Message[] };
+export type SavedMemory = { id: string; content: string; kind: 'preference' | 'fact'; created: number; updated: number };
 
 export async function api<T>(url: string, options?: RequestInit): Promise<T> {
   let response: Response;

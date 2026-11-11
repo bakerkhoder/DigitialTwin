@@ -7,19 +7,23 @@ namespace DigitalTwin.Api.Tests;
 internal sealed class GuardrailTestHarness : IDisposable
 {
     public TwinSettings Settings { get; }
-    public SessionRegistry Sessions { get; } = new();
+    public SessionRegistry Sessions { get; }
     public ScriptedChatClient Model { get; }
-    private readonly GuardrailChatClient _client;
+    private readonly IChatClient _client;
     public AIAgent Agent { get; }
     public GuardrailAgentRunner Runner { get; }
-    public string SessionId { get; } = Guid.NewGuid().ToString();
+    public string SessionId { get; }
 
     public GuardrailTestHarness(Func<int, ChatMessage[], CancellationToken, Task<ChatResponse>> script,
-        AITool[]? tools = null, TwinSettings? settings = null)
+        AITool[]? tools = null, TwinSettings? settings = null, SessionRegistry? sessions = null, string? sessionId = null,
+        AIContextProvider[]? contextProviders = null)
     {
         Settings = settings ?? new TwinSettings();
+        Sessions = sessions ?? new SessionRegistry();
+        SessionId = sessionId ?? Guid.NewGuid().ToString();
         Model = new ScriptedChatClient(script);
         _client = new GuardrailChatClient(Model, Settings);
+        if (contextProviders?.Length > 0) _client = _client.AsBuilder().UseAIContextProviders(contextProviders).Build();
         Agent = new ChatClientAgent(_client, instructions: "Use the requested tools and cite knowledge filenames.", tools: tools);
         Runner = new(Settings, Sessions, new InputGuardrailService(), new ToolAuthorizationService(), new OutputValidationService(Settings));
     }
@@ -43,10 +47,12 @@ internal sealed class GuardrailTestHarness : IDisposable
         public int Calls => _calls;
         public int? LastMaxOutputTokens { get; private set; }
         public int? LastToolCount { get; private set; }
+        public string? LastInstructions { get; private set; }
         public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
         {
             LastMaxOutputTokens = options?.MaxOutputTokens;
             LastToolCount = options?.Tools?.Count;
+            LastInstructions = options?.Instructions;
             return script(Interlocked.Increment(ref _calls), messages.ToArray(), cancellationToken);
         }
         public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)

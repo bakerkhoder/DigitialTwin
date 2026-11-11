@@ -14,8 +14,7 @@ public sealed class OutputValidationService(TwinSettings settings)
             return new("The knowledge base was not searched, so I cannot verify an answer from its documents. Please retry the knowledge question.", true);
         if (state.RequireKnowledge && state.KnowledgeSources.Count == 0)
             return new("I couldn't find relevant information in the knowledge base for this question.", true);
-        if (state.KnowledgeSources.Count > 0 && !state.KnowledgeSources.Any(source => text.Contains(source, StringComparison.OrdinalIgnoreCase)))
-            return new("I found relevant passages but the generated answer did not cite their sources. Please narrow the question and try again.", true);
+        text = KnowledgeAnswerPresentation.EnsureSources(text, state.KnowledgeSources);
         var redacted = SensitiveDataPolicy.Redact(text);
         var safeText = redacted == text ? text : redacted + "\n\nSensitive values were removed from this response.";
         if (safeText.Length > settings.Guardrails.MaxOutputCharacters)

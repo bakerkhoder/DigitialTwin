@@ -6,9 +6,13 @@ Reranking and knowledge lifecycle are documented in [docs/RERANKING-AND-KNOWLEDG
 
 Phase 3 adds MAF guardrail middleware, document safety review, execution budgets and credential redaction. Public web search is automatic, including after using documents; the earlier checkbox and conversation restriction were removed. See [docs/WEB-SEARCH-RESPONSE-FIX.md](docs/WEB-SEARCH-RESPONSE-FIX.md) for the response-quality fixes and [the guardrail guide](docs/GUARDRAILS-AND-POISONING-PREVENTION.md) for the remaining controls.
 
+Phase 4 adds SQLite conversation history and native MAF session restoration, one-time browser-history migration, and explicit Saved memory controls with local preference/fact retrieval. See [docs/CONVERSATIONS-AND-MEMORY.md](docs/CONVERSATIONS-AND-MEMORY.md) for exact changes, their purpose, storage lifecycle and verification.
+
+Chat source selection is automatic: current conversation facts, saved memory and uploaded profiles/documents are available without a **Use knowledge** checkbox. See [docs/AUTOMATIC-KNOWLEDGE.md](docs/AUTOMATIC-KNOWLEDGE.md) for the personal-information fallback and citation presentation fixes.
+
 **Goal:** A teachable local-first engineering assistant. Inspect ZIP projects or explicitly approved folders, ask a hosted Microsoft Agent Framework agent to explain them, use a RAG knowledge base, and export useful technical handoffs as **Markdown, PDF, PPTX, SVG or PNG**. The Approval Center gates folder scans and handoff exports (not Azure DevOps).
 
-> **Training sample, not production-ready.** The .NET and React build still needs to be verified on the user's Windows machine. Do not expose to a LAN/public endpoint or ingest unapproved confidential code into OpenRouter.
+> **Training sample, not production-ready.** API tests and the React production build are verified; deployment identity and per-user authorization remain separate work. Do not expose to a LAN/public endpoint or ingest unapproved confidential code into OpenRouter.
 
 ## Recommended development workflow (v4.1)
 
@@ -151,6 +155,7 @@ frontend/                         React UI (view state + calls to HTTP API)
   src/components/Knowledge.tsx     Batch ingestion, health, retrieval
   src/components/Projects.tsx      ZIP imports, allowlisted local folders, tree view
   src/components/Approvals.tsx     Manual review/approve/reject handoff
+  src/components/Memory.tsx        Explicit personal preferences and facts
   src/lib/api.ts                   HTTP/error handling & file downloads
 src/DigitalTwin.Api/
   Program.cs                       Dependency injection, IChatClient, MAF AddAIAgent, HTTP host
@@ -169,9 +174,9 @@ The design purposefully has **one hosted agent**, not unnecessary microservices 
 
 ## 8. Current limits / warnings
 
-- **Build unverified here:** This workspace has no `dotnet` executable and cannot access npm/NuGet networks; run `verify-v4.ps1` and share errors if any.
-- Browser localStorage stores chat history only for this demo (including possible sensitive text). Do not use this sample with confidential corporate content or expose it without authorization and durable protected storage.
-- Agent sessions and approvals are memory-only and reset on backend restart. Approval endpoint lacks real authentication; localhost and origin checks are **not a substitute** for auth.
+- Phase 4 verification: 133 API tests passed (four opt-in live tests skipped), frontend production build and persistence/guardrail renderer checks passed. See the phase guide for commands.
+- SQLite stores local chat history, native agent context and explicitly saved memories in `data/state/developertwin.db`. Previous browser history is imported once. The database contains unencrypted conversation data and must be protected appropriately.
+- Approvals remain memory-only and reset on backend restart. Approval and history endpoints lack production authentication; localhost and origin checks are **not a substitute** for auth.
 - Not implemented: SSE token streaming, native MAF checkpointed workflows, OCR, DOCX input, persistent secure user accounts, full repository indexing or generative PNG artwork.
 - OpenRouter free model tool calling and rate limits vary; the configured model may disappear or not support all required features. The UI displays the effective provider from `/api/status`.
 - QuestPDF **evaluation license** is set for this training sample. Check actual licensing before commercial or public-sector deployment.

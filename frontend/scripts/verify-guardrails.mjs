@@ -18,8 +18,9 @@ try {
   assert.ok(html.includes('noopener noreferrer'), 'Links must prevent referrer and opener access.');
   assert.ok(html.includes('referrerPolicy="no-referrer"'), 'Links must suppress referrer data.');
   assert.ok(!html.includes('Public web search'), 'Public search must not require a checkbox.');
+  assert.ok(!html.includes('Use knowledge'), 'Knowledge retrieval must not require a checkbox.');
   assert.ok(!html.includes('Start a new conversation for public'), 'Public research must work in the current conversation.');
-  console.log('Guardrail UI checks passed: safe Markdown rendering; no web-search checkbox or conversation block.');
+  console.log('Guardrail UI checks passed: safe Markdown rendering; automatic web and knowledge selection.');
 } finally {
   await server.close();
 }

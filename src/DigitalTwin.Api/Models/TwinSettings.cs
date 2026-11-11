@@ -5,6 +5,7 @@ public sealed class TwinSettings
 {
     [JsonIgnore] public string? OpenRouterApiKey { get; set; }
     public string Workspace { get; set; } = "./workspace";
+    public string StateDatabase { get; set; } = "./data/state/developertwin.db";
     public string OllamaUrl { get; set; } = "http://127.0.0.1:11434";
     public string Provider { get; set; } = "ollama";
     public bool EnableLocalFallback { get; set; } = true;

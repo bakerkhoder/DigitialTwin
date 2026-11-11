@@ -14,7 +14,7 @@
 | DT-010 | Azure DevOps ticket demo overscoped | **Removed** | No remote ticket publisher or credentials in v4. Handoff approval instead. |
 | DT-011 | Human approval real use case | **Starter demo** | Agent proposes a handoff; user approves/rejects export. Native MAF workflow HITL still future. |
 | DT-012 | Source isolation / privacy | **Starter safeguards** | Allowlist, text-only file reads, skip symlinks/binary/secrets. Auth/per-user isolation still required. |
-| DT-013 | Session persistence | **Pending** | In-memory MAF sessions; React browser history is not equivalent to persisted agent sessions. |
+| DT-013 | Session persistence | **Implemented and tested** | SQLite stores transcripts and native MAF snapshots; restored across new agent/HTTP-host instances. Browser history imports once. See `CONVERSATIONS-AND-MEMORY.md`. |
 | DT-014 | SSE streaming | **Pending** | Spinner and cancellation only; add MAF streaming in later iteration. |
 | DT-015 | Dockerless vector fallback | **Not planned** | Qdrant is explicit for training; clear health diagnostics rather than hiding missing infrastructure. |
 
@@ -96,3 +96,19 @@
 - Added the effective timeout (25 seconds per attempt), attempt limit (two) and cumulative retry count to `/api/tools/web-search/status`, plus attempt metadata on the tool trace. This makes it possible to distinguish an older backend process from the current retry policy. The tradeoff is one possible extra provider request and a longer wait when both attempts time out.
 - `WebSearchRetryTests.cs` covers recovery, the attempt limit, permanent errors, cancellation and recovered evidence reaching MAF without another user message. Validation: the default API suite passed 116 tests, with four opt-in live tests skipped. No model, frontend or search permission changes were needed for this follow-up.
 - A live weather smoke request against the rebuilt isolated API returned a summary and a retrieved link. Diagnostics confirmed a 25-second timeout, two-attempt limit, one provider call, zero retries and `lastOutcome=ok`; controlled HTTP tests cover the retry itself. The isolated API was stopped after validation.
+
+### Phase 4: durable conversation history and explicit personal memory
+
+- Added local SQLite state, schema migrations, atomic transcript/native-session saves and native MAF restoration. Failed turns evict uncommitted context while preserving the last successful snapshot. Deletion waits for active runs and leaves identifier-only markers to prevent resurrection by stale requests/imports.
+- Connected frontend history to list/detail/delete APIs and imported valid previous browser records idempotently. Import restores display messages; earlier native tool context was never stored in the browser and cannot be reconstructed from it. History loading/deletion errors are visible.
+- Added explicit Remember/Edit/Forget controls for response preferences and personal facts. MAF receives bounded transient preferences/relevant facts and a read-only memory search tool. SQLite FTS5 retrieves keywords locally; no new model or hosted memory service is required. Memory edits/deletion and knowledge changes invalidate durable context, including snapshots saved by older in-flight runs.
+- Validation: 133 API tests passed, with four opt-in live tests skipped. New cases use real SQLite, native MAF and HTTP host recreation. Production frontend build, persistence/migration renderer checks and existing guardrail renderer checks passed.
+- Exact file/change/purpose mapping, API contracts and storage limitations: [CONVERSATIONS-AND-MEMORY.md](CONVERSATIONS-AND-MEMORY.md).
+- Live verification with local `qwen3:8b` and a separate SQLite database restored a conversation-only codename and saved name preference across a real API process restart. Forget emptied the catalogue and the next same-session answer reported no saved preferred name. The smoke conversation was deleted and the isolated API stopped afterward.
+
+### Automatic knowledge selection and personal-profile fallback
+
+- Removed the Use knowledge composer checkbox and outgoing mode flag, including attachment requests. Legacy JSON/form flags are accepted but ignored so a greeting or user-supplied name cannot become a mandatory document verification request.
+- Corrected instructions and tool descriptions: use the current conversation first, check saved memories and uploaded profiles/notes before declaring a personal fact unavailable, and prefer current user corrections over older notes. No additional classification model or eager retrieval on every message was introduced.
+- A live regression exposed a second problem: successful profile retrieval still lost its answer when the local model omitted a filename citation. The chat presentation layer now appends actual retrieved filenames as Documents consulted and preserves that formatted answer in native history. This displays consulted sources rather than claiming independent factual verification.
+- Validation: 140 default API tests passed, five opt-in live tests skipped; frontend production build and guardrail/persistence renderer checks passed. Added a real local-model/Qdrant profile-selection regression with conversation correction and greeting checks. Exact file/change/purpose mapping: [AUTOMATIC-KNOWLEDGE.md](AUTOMATIC-KNOWLEDGE.md).

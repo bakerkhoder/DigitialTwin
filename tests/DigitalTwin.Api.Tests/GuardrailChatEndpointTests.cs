@@ -75,7 +75,7 @@ public sealed class GuardrailChatEndpointTests
         Assert.Equal(0, host.Model.Calls);
     }
 
-    private sealed class ChatHost : IAsyncDisposable
+    internal sealed class ChatHost : IAsyncDisposable
     {
         private readonly WebApplication _app;
         private readonly string _directory;
@@ -88,7 +88,7 @@ public sealed class GuardrailChatEndpointTests
         }
 
         public static async Task<ChatHost> Start(Func<int, ChatMessage[], CancellationToken, Task<ChatResponse>> script,
-            AITool[]? tools = null, TwinSettings? settings = null)
+            AITool[]? tools = null, TwinSettings? settings = null, string? databasePath = null)
         {
             var builder = WebApplication.CreateBuilder();
             builder.Logging.ClearProviders();
@@ -98,6 +98,15 @@ public sealed class GuardrailChatEndpointTests
             Directory.CreateDirectory(directory);
             settings.Workspace = directory;
             builder.Services.AddSingleton(settings);
+            MemoryStore? memories = null;
+            if (databasePath is not null)
+            {
+                var database = new LocalStateDatabase(databasePath);
+                builder.Services.AddSingleton(database);
+                builder.Services.AddSingleton<ConversationStore>();
+                memories = new(database);
+                builder.Services.AddSingleton(memories);
+            }
             builder.Services.AddSingleton<SessionRegistry>();
             builder.Services.AddDeveloperTwinGuardrails(settings);
             builder.Services.AddSingleton<ProjectCatalog>();
@@ -105,12 +114,15 @@ public sealed class GuardrailChatEndpointTests
             builder.Services.AddSingleton(new VisionTools(new HttpClient(), settings));
             builder.Services.AddSingleton<DocumentExtractionService>();
             var model = new ScriptedChatClient(script);
-            builder.Services.AddSingleton<IChatClient>(new GuardrailChatClient(model, settings));
-            var registration = builder.AddAIAgent("DeveloperTwin", instructions: "Use tools and cite sources.");
+            IChatClient client = new GuardrailChatClient(model, settings);
+            if (memories is not null) client = client.AsBuilder().UseAIContextProviders(new SavedMemoryContextProvider(memories)).Build();
+            builder.Services.AddSingleton(client);
+            var registration = builder.AddAIAgent("DeveloperTwin", instructions: AgentInstructions.DeveloperTwin);
             foreach (var tool in tools ?? []) registration.WithAITool(tool);
             registration.WithInMemorySessionStore();
             var app = builder.Build();
             app.MapChatEndpoints();
+            if (memories is not null) app.MapMemoryEndpoints();
             await app.StartAsync();
             return new(app, directory, model);
         }

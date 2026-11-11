@@ -155,7 +155,7 @@ public sealed class LiveKnowledgeIntegrationTests(ITestOutputHelper output)
         output.WriteLine("All 205 legacy points were listed across scroll pages, deprecated before top-k selection, restored, and deleted; the other document remained.");
     }
 
-    private sealed class LiveKnowledgeBackend : IAsyncDisposable
+    internal sealed class LiveKnowledgeBackend : IAsyncDisposable
     {
         private readonly CountingHandler _handler = new();
         private readonly ITestOutputHelper _output;

@@ -30,6 +30,20 @@ public sealed class GuardrailChatClient(IChatClient inner, TwinSettings settings
         var snapshot = messages.ToArray();
         var response = await base.GetResponseAsync(snapshot, Prepare(snapshot, options), cancellationToken);
         if (response.Messages.Any(m => m.Contents.OfType<FunctionCallContent>().Any())) return response;
+        var state = GuardrailContext.Required;
+        var knowledgeTool = options?.Tools?.FirstOrDefault(tool => tool.Name == "SearchKnowledge");
+        if (state.KnowledgeSearches == 0 && state.CanCallModel && knowledgeTool is not null &&
+            KnowledgeToolRecovery.IsPrematureRefusal(response.Text) && state.TryRecoverKnowledge())
+        {
+            using var recovery = DeveloperTwinTelemetry.Activities.StartActivity("knowledge.recover");
+            var correctedMessages = snapshot.Append(new ChatMessage(ChatRole.System, KnowledgeToolRecovery.Instructions)).ToArray();
+            var correctedOptions = Prepare(correctedMessages, options);
+            // Keep recovery read-only and let native MAF execute any returned tool call.
+            correctedOptions.Tools = [knowledgeTool];
+            correctedOptions.ToolMode = ChatToolMode.Auto;
+            response = await base.GetResponseAsync(correctedMessages, correctedOptions, cancellationToken);
+            if (response.Messages.Any(m => m.Contents.OfType<FunctionCallContent>().Any())) return response;
+        }
         if (!string.IsNullOrWhiteSpace(response.Text))
             return await PresentPublicAnswer(response, snapshot, options, cancellationToken);
         // One bounded recovery of an empty final answer. Do not repeat any tools or their side effects.
@@ -46,10 +60,14 @@ public sealed class GuardrailChatClient(IChatClient inner, TwinSettings settings
         ChatOptions? options, CancellationToken ct)
     {
         var state = GuardrailContext.Required;
+        var citedText = KnowledgeAnswerPresentation.EnsureSources(response.Text, state.KnowledgeSources);
+        if (citedText != response.Text)
+            response = new ChatResponse(new ChatMessage(ChatRole.Assistant, citedText))
+                { ModelId = response.ModelId, Usage = response.Usage, ResponseId = response.ResponseId, FinishReason = response.FinishReason };
         var sources = state.WebSources;
         using var presentation = DeveloperTwinTelemetry.Activities.StartActivity("answer.present");
         presentation?.SetTag("answer.web_sources", sources.Count);
-        if (sources.Count == 0 && state.WebFailure is { } failure)
+        if (sources.Count == 0 && state.KnowledgeSources.Count == 0 && state.WebFailure is { } failure)
             return new ChatResponse(new ChatMessage(ChatRole.Assistant,
                 $"{failure.Message} I couldn't verify updated information for this request. Please try again."))
                 { ModelId = response.ModelId, Usage = response.Usage, ResponseId = response.ResponseId, FinishReason = response.FinishReason };

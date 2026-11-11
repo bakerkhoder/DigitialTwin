@@ -3,7 +3,7 @@ namespace DigitalTwin.Api;
 public sealed class ToolAuthorizationService
 {
     private static readonly HashSet<string> Allowed = new(StringComparer.Ordinal)
-        { "ListProject", "ReadFile", "SearchKnowledge", "SearchWeb", "ProposeHandoff" };
+        { "ListProject", "ReadFile", "SearchKnowledge", "SearchMemories", "SearchWeb", "ProposeHandoff" };
     private static readonly HashSet<string> ProtectedSegments = new(StringComparer.OrdinalIgnoreCase)
         { ".git", ".aws", ".ssh", ".azure", ".codex", ".agents" };
 
@@ -12,7 +12,7 @@ public sealed class ToolAuthorizationService
         var state = GuardrailContext.Required;
         state.ThrowIfStopped();
         if (!Allowed.Contains(name)) throw new GuardrailViolationException("tool_denied", "This tool is not authorized for the agent.");
-        if (name is "ListProject" or "ReadFile" or "SearchKnowledge") state.MarkPrivate();
+        if (name is "ListProject" or "ReadFile" or "SearchKnowledge" or "SearchMemories") state.MarkPrivate();
         if (name == "SearchWeb") AuthorizeWebSearch();
         if (name == "ProposeHandoff") AuthorizeHandoff();
     }
