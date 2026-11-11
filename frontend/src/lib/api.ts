@@ -1,6 +1,7 @@
 export type ProviderStatus = { provider: string; chatModel: string; fallback: string; visionModel: string; visionProvider?: string; pdfAnalysisProvider?: string; openRouterApiKeyConfigured?: boolean; embeddings: string; webSearch: string };
 export type KnowledgeHealth = { qdrant: boolean; ollama: boolean; message: string };
-export type KnowledgeDocument = { id: string; source: string; chunks: number; revision: string; indexedAtUtc?: string | null; status: 'active' | 'deprecated' };
+export type KnowledgeDocument = { id: string; source: string; chunks: number; revision: string; indexedAtUtc?: string | null; status: 'active' | 'deprecated'; reviewStatus: 'legacy' | 'not-required' | 'pending' | 'approved'; riskReasons?: string[] };
+export type KnowledgeReviewPreview = { document: KnowledgeDocument; chunks: { chunk: number; text: string }[] };
 export type KnowledgeHit = { source: string; text: string; score: number; id: string; documentId: string; revision: string; chunk: number; vectorRank: number; rerankScore: number | null; rank: number };
 export type KnowledgeSearchResult = { candidates: KnowledgeHit[]; hits: KnowledgeHit[]; reranker: string; fallbackUsed: boolean; warning: string | null };
 export type Approval = { id: string; kind: string; summary: string; payload: string; createdAt: string };

@@ -6,16 +6,22 @@ using System.Text.Json;
 
 namespace DigitalTwin.Api;
 
-public sealed record KnowledgeDocument(string Id, string Source, int Chunks, string Revision, string? IndexedAtUtc, string Status = "active");
-public sealed record KnowledgeIngestResult(int Chunks, bool Unchanged, string Revision, string Status);
+public sealed record KnowledgeDocument(string Id, string Source, int Chunks, string Revision, string? IndexedAtUtc,
+    string Status = "active", string ReviewStatus = "legacy", string[]? RiskReasons = null);
+public sealed record KnowledgeIngestResult(int Chunks, bool Unchanged, string Revision, string Status,
+    string ReviewStatus = "not-required", string[]? RiskReasons = null);
+public sealed record KnowledgeReviewChunk(int Chunk, string Text);
+public sealed record KnowledgeReviewPreview(KnowledgeDocument Document, IReadOnlyList<KnowledgeReviewChunk> Chunks);
+public sealed class KnowledgeReviewConflictException() : Exception("The document changed after it was opened for review. Reload it before approving.");
 
 /// <summary>
 /// Qdrant is the source of truth for indexed passages. A document's identity is its
 /// normalized filename in THIS single-user demo. Re-uploading that name replaces
 /// the old revision; use distinct filenames for different source documents.
 /// </summary>
-public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
+public sealed class KnowledgeStore(HttpClient http, TwinSettings settings, ContentSafetyService? safety = null)
 {
+    private readonly ContentSafetyService _safety = safety ?? new ContentSafetyService();
     // Serialize changes so a simultaneous delete/upload cannot leave stray chunks.
     private readonly SemaphoreSlim _mutation = new(1, 1);
     private string CollectionPath => $"{settings.QdrantUrl.TrimEnd('/')}/collections/{Uri.EscapeDataString(settings.Collection)}";
@@ -57,10 +63,11 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
             new { vectors = new { size = settings.EmbeddingDimensions, distance = "Cosine" } }, ct);
         res.EnsureSuccessStatusCode();
     }
-    private sealed record IndexedPoint(string Id, string Source, string Revision, string? IndexedAtUtc, string Status, string Pipeline);
+    private sealed record IndexedPoint(string Id, string Source, string Revision, string? IndexedAtUtc, string Status,
+        string Pipeline, string ReviewStatus, string[] RiskReasons, int Chunk, string Text);
 
     // Scroll ALL pages; returning just the first page would leak stale/unlisted documents.
-    private async Task<List<IndexedPoint>> Scroll(string? source, CancellationToken ct)
+    private async Task<List<IndexedPoint>> Scroll(string? source, CancellationToken ct, bool includeText = false)
     {
         if (!await CollectionExists(ct)) return [];
         var all = new List<IndexedPoint>();
@@ -92,7 +99,12 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
                     payload.TryGetProperty("revision", out var revision) ? revision.GetString() ?? "legacy" : "legacy",
                     payload.TryGetProperty("indexedAtUtc", out var when) ? when.GetString() : null,
                     payload.TryGetProperty("status", out var status) ? status.GetString() ?? "active" : "active",
-                    payload.TryGetProperty("pipeline", out var pipeline) ? pipeline.GetString() ?? "" : ""));
+                    payload.TryGetProperty("pipeline", out var pipeline) ? pipeline.GetString() ?? "" : "",
+                    payload.TryGetProperty("reviewStatus", out var review) ? review.GetString() ?? "legacy" : "legacy",
+                    payload.TryGetProperty("riskReasons", out var risks) && risks.ValueKind == JsonValueKind.Array
+                        ? risks.EnumerateArray().Select(r => r.GetString() ?? "").ToArray() : [],
+                    payload.TryGetProperty("chunk", out var chunk) ? chunk.GetInt32() : 0,
+                    includeText && payload.TryGetProperty("text", out var text) ? text.GetString() ?? "" : ""));
             }
             offset = result.TryGetProperty("next_page_offset", out var next) && next.ValueKind != JsonValueKind.Null
                 ? next.Clone() : null;
@@ -103,11 +115,56 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
     public async Task<IReadOnlyList<KnowledgeDocument>> ListDocuments(CancellationToken ct)
     {
         var points = await Scroll(null, ct);
-        return points.GroupBy(p => p.Source, StringComparer.Ordinal).Select(g =>
-            new KnowledgeDocument(DocumentId(g.Key), g.Key, g.Count(),
-                g.OrderByDescending(p => p.IndexedAtUtc).First().Revision,
-                g.Max(p => p.IndexedAtUtc),
-                g.Any(p => p.Status == "deprecated") ? "deprecated" : "active")).OrderBy(x => x.Source, StringComparer.OrdinalIgnoreCase).ToArray();
+        return points.GroupBy(p => p.Source, StringComparer.Ordinal).Select(g => Describe(g.ToArray()))
+            .OrderBy(x => x.Source, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static KnowledgeDocument Describe(IReadOnlyList<IndexedPoint> points)
+    {
+        var latest = points.OrderByDescending(p => p.IndexedAtUtc).First();
+        var review = points.Any(p => p.ReviewStatus == "pending") ? "pending" : latest.ReviewStatus;
+        return new(DocumentId(latest.Source), latest.Source, points.Count, latest.Revision,
+            points.Max(p => p.IndexedAtUtc), points.Any(p => p.Status == "deprecated") ? "deprecated" : "active",
+            review, points.SelectMany(p => p.RiskReasons).Distinct().ToArray());
+    }
+
+    public async Task<KnowledgeReviewPreview?> GetReview(string id, CancellationToken ct)
+    {
+        await _mutation.WaitAsync(ct);
+        try
+        {
+            var source = (await Scroll(null, ct)).FirstOrDefault(p => DocumentId(p.Source) == id)?.Source;
+            if (source is null) return null;
+            var points = await Scroll(source, ct, includeText: true);
+            return new(Describe(points), points.OrderBy(p => p.Chunk)
+                .Select(p => new KnowledgeReviewChunk(p.Chunk, SensitiveDataPolicy.Redact(p.Text))).ToArray());
+        }
+        finally { _mutation.Release(); }
+    }
+
+    public async Task<bool> ApproveReview(string id, string expectedRevision, CancellationToken ct)
+    {
+        await _mutation.WaitAsync(ct);
+        try
+        {
+            var points = (await Scroll(null, ct)).Where(p => DocumentId(p.Source) == id).ToArray();
+            if (points.Length == 0) return false;
+            if (points.Any(p => p.Revision != expectedRevision)) throw new KnowledgeReviewConflictException();
+            if (points.Any(p => p.RiskReasons.Contains("possible-credential")))
+                throw new GuardrailViolationException("credential_document", "Remove possible credentials from the original document and re-upload it before approval.");
+            using var response = await http.PostAsJsonAsync($"{CollectionPath}/points/payload?wait=true", new
+            {
+                payload = new { reviewStatus = "approved", reviewedAtUtc = DateTimeOffset.UtcNow.ToString("O") },
+                filter = new { must = new[]
+                {
+                    new { key = "source", match = new { value = points[0].Source } },
+                    new { key = "revision", match = new { value = expectedRevision } }
+                } }
+            }, ct);
+            response.EnsureSuccessStatusCode();
+            return true;
+        }
+        finally { _mutation.Release(); }
     }
     private async Task DeletePointIds(IEnumerable<string> pointIds, CancellationToken ct)
     {
@@ -167,7 +224,8 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
         }
         var revision = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
         // Re-index once when changing embedding models/dimensions or chunking rules.
-        var pipeline = $"chunks-v2|{settings.EmbeddingModel}|{settings.EmbeddingDimensions}";
+        var pipeline = $"chunks-v3|{settings.EmbeddingModel}|{settings.EmbeddingDimensions}|screening-v1";
+        var assessment = _safety.Assess(source + "\n" + text);
         var indexedAt = DateTimeOffset.UtcNow.ToString("O");
         var newIds = Enumerable.Range(0, chunks.Count).Select(i => new Guid(
             SHA256.HashData(Encoding.UTF8.GetBytes($"{source}|{revision}|{pipeline}|{i}")).AsSpan(0, 16)).ToString()).ToArray();
@@ -183,7 +241,7 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
                 && oldIds.SetEquals(newIds))
             {
                 activity?.SetTag("knowledge.unchanged", true);
-                return new(chunks.Count, true, revision, status);
+                return new(chunks.Count, true, revision, status, previous[0].ReviewStatus, previous[0].RiskReasons);
             }
             // All embeddings must succeed before any indexed content is changed.
             var points = new List<object>();
@@ -198,7 +256,8 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
                     payload = new
                     {
                         source, documentId = DocumentId(source), revision, indexedAtUtc = indexedAt,
-                        text = chunks[i], chunk = i, status, pipeline, trustLevel = "user-uploaded"
+                        text = chunks[i], chunk = i, status, pipeline, trustLevel = "user-uploaded",
+                        reviewStatus = assessment.ReviewStatus, riskReasons = assessment.RiskReasons
                     }
                 });
             }
@@ -225,7 +284,7 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
             activity?.SetTag("knowledge.chunks", chunks.Count);
             activity?.SetTag("knowledge.unchanged", false);
             DeveloperTwinTelemetry.KnowledgeChunks.Add(chunks.Count);
-            return new(chunks.Count, false, revision, status);
+            return new(chunks.Count, false, revision, status, assessment.ReviewStatus, assessment.RiskReasons);
         }
         finally { _mutation.Release(); }
     }
@@ -241,10 +300,19 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
             throw new InvalidOperationException($"Embedding must contain {settings.EmbeddingDimensions} finite dimensions.");
         // Apply lifecycle filtering inside Qdrant BEFORE selecting top candidates.
         // Missing status means active for compatibility with the existing library.
-        var filter = new { should = new object[]
+        var filter = new { must = new object[]
         {
-            new { key = "status", match = new { value = "active" } },
-            new { is_empty = new { key = "status" } }
+            new { should = new object[]
+            {
+                new { key = "status", match = new { value = "active" } },
+                new { is_empty = new { key = "status" } }
+            } },
+            new { should = new object[]
+            {
+                new { key = "reviewStatus", match = new { value = "approved" } },
+                new { key = "reviewStatus", match = new { value = "not-required" } },
+                new { is_empty = new { key = "reviewStatus" } }
+            } }
         } };
         using var response = await http.PostAsJsonAsync($"{CollectionPath}/points/search",
             new { vector, limit = candidateCount, score_threshold = settings.KnowledgeMinScore, with_payload = true, filter }, ct);
@@ -256,7 +324,12 @@ public sealed class KnowledgeStore(HttpClient http, TwinSettings settings)
             var payload = p.GetProperty("payload");
             if (payload.TryGetProperty("status", out var status) && status.ValueKind == JsonValueKind.String && status.GetString() != "active") continue;
             var source = payload.GetProperty("source").GetString() ?? "unknown";
-            hits.Add(new(source, payload.GetProperty("text").GetString() ?? "", p.GetProperty("score").GetDouble(),
+            var text = payload.GetProperty("text").GetString() ?? "";
+            var reviewStatus = payload.TryGetProperty("reviewStatus", out var review) ? review.GetString() : null;
+            if (reviewStatus is not (null or "approved" or "not-required")) continue;
+            // Legacy points remain compatible, but detected attacks are screened before reaching a model.
+            if (reviewStatus is null && _safety.Assess(source + "\n" + text).RequiresReview) continue;
+            hits.Add(new(source, SensitiveDataPolicy.Redact(text), p.GetProperty("score").GetDouble(),
                 p.GetProperty("id").ToString(), DocumentId(source),
                 payload.TryGetProperty("revision", out var revision) ? revision.GetString() ?? "legacy" : "legacy",
                 payload.TryGetProperty("chunk", out var chunk) ? chunk.GetInt32() : 0, hits.Count + 1));

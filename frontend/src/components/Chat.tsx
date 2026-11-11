@@ -6,7 +6,7 @@ import type { Message } from '../lib/api';
 import ImageGenerator from './ImageGenerator';
 
 type Props = {
-  messages: Message[]; busy: boolean; onSend: (text: string, files: File[], allowExternalAnalysis: boolean) => void;
+  messages: Message[]; busy: boolean; onSend: (text: string, files: File[], allowExternalAnalysis: boolean, useKnowledge: boolean) => void;
   onStop: () => void; onExport: (content: string, format: 'md' | 'pdf' | 'pptx' | 'svg' | 'png') => void;
   draft: string; setDraft: (draft: string) => void; onReview: (content: string) => void;
 };
@@ -24,7 +24,7 @@ export default function Chat({ messages, busy, onSend, onStop, onExport, draft, 
   }, [messages, busy]);
   const submit = (e?: FormEvent) => {
     e?.preventDefault(); if (busy || (!draft.trim() && !files.length)) return;
-    onSend(knowledge ? `Use SearchKnowledge when relevant. ${draft.trim()}` : draft.trim(), files, allowExternalAnalysis);
+    onSend(draft.trim(), files, allowExternalAnalysis, knowledge);
     setDraft(''); setFiles([]); setAllowExternalAnalysis(false); if (picker.current) picker.current.value = '';
   };
   const lastAnswer = [...messages].reverse().find(m => m.role === 'assistant' && !m.error)?.text;
@@ -39,7 +39,7 @@ export default function Chat({ messages, busy, onSend, onStop, onExport, draft, 
         <div className="prompts">
           <button onClick={() => setDraft('Inspect my imported project and explain its architecture, frameworks, major files and dependencies.')}><FolderTree size={16}/> Explain a project <span>→</span></button>
           <button onClick={() => setDraft('Search my knowledge base and extract business requirements, business rules, exceptions and missing information.')}><BrainCircuit size={16}/> Extract requirements <span>→</span></button>
-          <button onClick={() => setDraft('Search official Microsoft Agent Framework documentation and explain hosted agents and tool calling with examples.')}><Globe2 size={16}/> Research MAF <span>→</span></button>
+          <button onClick={() => { setKnowledge(false); setDraft('Search official Microsoft Agent Framework documentation and explain hosted agents and tool calling with examples.'); }}><Globe2 size={16}/> Research MAF <span>→</span></button>
         </div>
       </div>}
       {messages.map((m, i) => <div className={`chat-line ${m.role}`} key={i}>
@@ -48,7 +48,10 @@ export default function Chat({ messages, busy, onSend, onStop, onExport, draft, 
           <div className="message-author">{m.role === 'assistant' ? 'DeveloperTwin' : 'You'}</div>
           {m.attachments?.length ? <div className="attachment-tags">{m.attachments.map((x, n) => <span key={n}><Paperclip size={12}/>{x}</span>)}</div> : null}
           {m.role === 'assistant' && !m.error
-            ? <div className="markdown"><Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown></div>
+            ? <div className="markdown"><Markdown remarkPlugins={[remarkGfm]} components={{
+                img: ({ alt }) => <span>{alt ? `Image reference: ${alt}` : 'Image reference'}</span>,
+                a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{children}</a>
+              }}>{m.text}</Markdown></div>
             : <div className="message-plain">{m.text}</div>}
           {m.role === 'assistant' && !m.error && <div className="inline-actions"><button onClick={() => navigator.clipboard.writeText(m.text)}>Copy response</button></div>}
         </div>

@@ -44,6 +44,8 @@
 .knowledge-hint{font-size:12px;color:#aabbd9;margin:0 0 18px;line-height:1.7}
 .external-analysis-option{display:flex;align-items:center;gap:8px;font-size:12px;color:#bbc9e4;margin:12px 0;line-height:1.5}
 .external-analysis-option input{accent-color:#8881ff;flex-shrink:0}
+.review-document-text{max-height:420px;overflow:auto;margin:16px 0;padding:16px;border:1px solid #334866;border-radius:10px;background:#0e1527}
+.review-document-text pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#b9cae9;font:12px/1.6 ui-monospace,Consolas,monospace;margin:10px 0 20px}
 .retrieval-diagnostics{overflow-x:auto;margin-top:18px;color:#b9cae9;font-size:12px}
 .retrieval-diagnostics summary{cursor:pointer;color:#c8c2ff;margin-bottom:12px}
 .retrieval-diagnostics table{border-collapse:collapse;width:100%;text-align:left}

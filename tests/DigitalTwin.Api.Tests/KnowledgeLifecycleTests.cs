@@ -45,7 +45,7 @@ public sealed class KnowledgeLifecycleTests
         backend.Seed("active.txt", "Current evidence", .7);
         var result = await backend.Retrieval(new NoOpReranker()).SearchAsync("question", default);
         Assert.Equal(new[] { "legacy.txt", "active.txt" }, result.Hits.Select(h => h.Source));
-        Assert.NotNull(backend.LastSearch!["filter"]!["should"]);
+        Assert.NotNull(backend.LastSearch!["filter"]!["must"]![0]!["should"]);
     }
 
     [Fact]

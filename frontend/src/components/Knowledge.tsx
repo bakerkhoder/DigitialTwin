@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Database, UploadCloud, Search, RefreshCw, CheckCircle2, AlertCircle, FileText, HardDrive, Trash2, Loader2 } from 'lucide-react';
-import { api, type KnowledgeHealth, type KnowledgeSearchResult, type KnowledgeDocument } from '../lib/api';
+import { api, type KnowledgeHealth, type KnowledgeSearchResult, type KnowledgeDocument, type KnowledgeReviewPreview } from '../lib/api';
 
-type Outcome = { file: string; chunks?: number; unchanged?: boolean; status?: string; extraction?: string; error?: string };
+type Outcome = { file: string; chunks?: number; unchanged?: boolean; status?: string; reviewStatus?: string; extraction?: string; error?: string };
 type Props = { activity: (name: string, description: string) => void };
 export default function Knowledge({ activity }: Props) {
   const [health, setHealth] = useState<KnowledgeHealth | null>(null);
@@ -10,6 +10,7 @@ export default function Knowledge({ activity }: Props) {
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [review, setReview] = useState<KnowledgeReviewPreview | null>(null);
   const [progress, setProgress] = useState(false);
   const [results, setResults] = useState<Outcome[]>([]);
   const [query, setQuery] = useState('');
@@ -50,6 +51,25 @@ export default function Knowledge({ activity }: Props) {
     } catch (e) { setError((e as Error).message); }
     finally { setDeletingId(null); }
   };
+  const openReview = async (doc: KnowledgeDocument) => {
+    setError(''); setDeletingId(doc.id);
+    try { setReview(await api<KnowledgeReviewPreview>(`/api/knowledge/documents/${doc.id}/review`)); }
+    catch (e) { setError((e as Error).message); }
+    finally { setDeletingId(null); }
+  };
+  const approveReview = async () => {
+    if (!review) return;
+    const { document } = review;
+    setError(''); setDeletingId(document.id);
+    try {
+      await api<void>(`/api/knowledge/documents/${document.id}/review/approve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision: document.revision })
+      });
+      setReview(null); clearSearch(); await refreshDocuments();
+      activity('Document reviewed', document.source);
+    } catch (e) { setError((e as Error).message); }
+    finally { setDeletingId(null); }
+  };
   const checkHealth = () => api<KnowledgeHealth>('/api/knowledge/health').then(setHealth).catch(e => setHealth({ qdrant: false, ollama: false, message: e.message }));
   useEffect(() => { void checkHealth(); void refreshDocuments(); }, []);
   const ingest = async (e: FormEvent) => {
@@ -85,18 +105,21 @@ export default function Knowledge({ activity }: Props) {
       <p className="small-muted">Searchable PDFs and DOCX are extracted locally. Scanned PDFs need OCR; images need a vision model.</p>
       {files.length > 0 && <div className="file-rows">{files.map((f,i) => <div className="file-row" key={i}><FileText size={15}/>{f.name}<span>{(f.size/1024/1024).toFixed(2)} MB</span></div>)}</div>}
       <button className="primary" disabled={!files.length || progress || !health?.qdrant}>{progress ? 'Processing files...' : 'Index knowledge'}</button>
-      {results.length > 0 && <div className="results-list">{results.map((r,i) => <div className={`result ${r.error ? 'failed' : 'passed'}`} key={i}><strong>{r.file}</strong><span>{r.error ?? `${r.unchanged ? 'Unchanged — embeddings reused' : `${r.chunks} chunks indexed`} · ${r.status} · ${r.extraction}`}</span></div>)}</div>}
+      {results.length > 0 && <div className="results-list">{results.map((r,i) => <div className={`result ${r.error ? 'failed' : 'passed'}`} key={i}><strong>{r.file}</strong><span>{r.error ?? `${r.unchanged ? 'Unchanged — embeddings reused' : `${r.chunks} chunks indexed`} · ${r.reviewStatus === 'pending' ? 'Review required before retrieval' : r.status} · ${r.extraction}`}</span></div>)}</div>}
     </form>
     <section className="panel" aria-label="Indexed documents">
       <div className="panel-title"><h2>Indexed documents ({documents.length})</h2>
         <button type="button" className="secondary" disabled={loadingDocuments} onClick={() => void refreshDocuments()}><RefreshCw size={14}/> Refresh</button></div>
       <p className="knowledge-hint">Re-upload the <strong>same filename</strong> to replace a document. Identical text reuses its embeddings. Deprecated documents stay in the library and are excluded from search until restored; re-uploading keeps their status. Changes reset the agent’s conversation context; your visible chat history remains. Deleting permanently removes indexed text and vectors.</p>
+      <p className="knowledge-hint">Documents flagged for suspicious instructions or possible credentials stay out of retrieval until you review them. Approval allows reference use; document text cannot grant project access or authorize actions.</p>
       {loadingDocuments && <p className="small-muted"><Loader2 size={13}/> Loading document index...</p>}
       {!loadingDocuments && documents.length === 0 && <div className="empty compact-empty">No indexed files yet. Upload your TXT knowledge examples above.</div>}
       <div className="indexed-documents">{documents.map(doc =>
         <div className="indexed-document" key={doc.id}>
           <FileText size={18}/><div className="doc-summary"><strong title={doc.source}>{doc.source}</strong>
-            <small>{doc.status} · {doc.chunks} chunks · version {doc.revision.slice(0,10)} · {doc.indexedAtUtc ? new Date(doc.indexedAtUtc).toLocaleString() : 'Legacy record'}</small></div>
+            <small>{doc.status} · {doc.reviewStatus === 'pending' ? 'Review required' : doc.reviewStatus === 'approved' ? 'Reviewed' : doc.reviewStatus === 'legacy' ? 'Legacy screening on retrieval' : 'Screened'} · {doc.chunks} chunks · version {doc.revision.slice(0,10)}</small></div>
+          {doc.reviewStatus === 'pending' && <button type="button" className="secondary" disabled={deletingId !== null || progress}
+            onClick={() => void openReview(doc)}>Review</button>}
           <button type="button" className="secondary" disabled={deletingId !== null || progress}
             onClick={() => void changeStatus(doc)}>{doc.status === 'deprecated' ? 'Restore' : 'Deprecate'}</button>
           <button type="button" className="delete-action" disabled={deletingId !== null || progress} aria-label={`Delete ${doc.source} from knowledge`}
@@ -104,6 +127,13 @@ export default function Knowledge({ activity }: Props) {
         </div>)}
       </div>
     </section>
+    {review && <section className="panel" aria-label="Document safety review">
+      <div className="panel-title"><h2>Review {review.document.source}</h2><button type="button" className="secondary" onClick={() => setReview(null)}>Close</button></div>
+      <p className="knowledge-hint">Flagged for: {(review.document.riskReasons ?? []).join(', ')}. Read the content before approving it for retrieval. Known credential patterns are redacted in this preview and in retrieval results.</p>
+      {review.document.riskReasons?.includes('possible-credential') && <p className="knowledge-hint">Remove possible credentials from the original document and re-upload it before approval.</p>}
+      <div className="review-document-text">{review.chunks.map(chunk => <div key={chunk.chunk}><strong>Chunk {chunk.chunk + 1}</strong><pre>{chunk.text}</pre></div>)}</div>
+      <button type="button" className="primary" disabled={deletingId !== null || progress || review.document.riskReasons?.includes('possible-credential')} onClick={() => void approveReview()}>Approve this revision for retrieval</button>
+    </section>}
     <form className="panel" onSubmit={search}><div className="panel-title"><h2>Knowledge search</h2><span>Retrieve candidates, rerank, then select passages</span></div><div className="search-row"><Search size={18}/><input maxLength={500} placeholder="Example: What are the approval rules?" value={query} onChange={e => setQuery(e.target.value)}/><button className="primary" disabled={busySearch}>{busySearch ? 'Searching...' : 'Search'}</button></div>
       {searchResult?.warning && <p role="status" className="knowledge-hint">{searchResult.warning}</p>}
       {hits.map(h => <div className="knowledge-hit" key={h.id}><strong>#{h.rank} {h.source}</strong><span>Vector #{h.vectorRank} · similarity {h.score.toFixed(3)}{h.rerankScore !== null && ` · relevance ${h.rerankScore.toFixed(1)}/100`}</span><p>{h.text.slice(0,1300)}</p></div>)}

@@ -22,6 +22,7 @@ public sealed class WorkspaceTools(TwinSettings settings, ProjectCatalog catalog
     private string Resolve(string relative)
     {
         if (string.IsNullOrWhiteSpace(relative)) relative = ".";
+        if (relative.Length > 500) throw new UnauthorizedAccessException("Project paths must be at most 500 characters.");
         relative = relative.Replace('\\', '/');
         string baseDir = _root;
         string subPath = relative;
@@ -47,7 +48,7 @@ public sealed class WorkspaceTools(TwinSettings settings, ProjectCatalog catalog
         {
         var path = Resolve(relativePath);
         var name = Path.GetFileName(path);
-        if (name.StartsWith(".env", StringComparison.OrdinalIgnoreCase) ||
+        if (ToolAuthorizationService.IsSensitivePath(path) || name.StartsWith(".env", StringComparison.OrdinalIgnoreCase) ||
             name.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
             name.Contains("credential", StringComparison.OrdinalIgnoreCase) ||
             name.EndsWith(".user", StringComparison.OrdinalIgnoreCase) ||
@@ -56,7 +57,7 @@ public sealed class WorkspaceTools(TwinSettings settings, ProjectCatalog catalog
         var file = new FileInfo(path);
         if (!file.Exists) return "File not found.";
         if (file.Length > 250_000) return "File exceeds 250 KB; please inspect a smaller file.";
-        return File.ReadAllText(path);
+        return SensitiveDataPolicy.Redact(File.ReadAllText(path));
         }
         catch { toolTelemetry.Fail(); throw; }
     }
@@ -77,7 +78,7 @@ public sealed class WorkspaceTools(TwinSettings settings, ProjectCatalog catalog
                 foreach (var entry in Directory.EnumerateFileSystemEntries(folder).OrderBy(p => p).Take(160))
                 {
                     var name = Path.GetFileName(entry);
-                    if (Excluded.Contains(name) || name.StartsWith(".env", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (Excluded.Contains(name) || ToolAuthorizationService.IsSensitivePath(name)) continue;
                     if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0) continue;
                     bool isDir = Directory.Exists(entry);
                     lines.Add(new string(' ', depth * 2) + name + (isDir ? "/" : ""));
@@ -104,7 +105,7 @@ public sealed class WorkspaceTools(TwinSettings settings, ProjectCatalog catalog
             foreach (var entry in Directory.EnumerateFileSystemEntries(folder).OrderBy(p => p))
             {
                 var name = Path.GetFileName(entry);
-                if (Excluded.Contains(name) || name.StartsWith(".env", StringComparison.OrdinalIgnoreCase)) continue;
+                if (Excluded.Contains(name) || ToolAuthorizationService.IsSensitivePath(name)) continue;
                 ProjectCatalog.GuardLinks(entry);
                 var isDirectory = Directory.Exists(entry);
                 entries.Add((entry, Path.GetRelativePath(root, entry).Replace('\\', '/'), isDirectory, depth));
@@ -134,7 +135,7 @@ public sealed class WorkspaceTools(TwinSettings settings, ProjectCatalog catalog
             var file = new FileInfo(candidate.FullPath);
             if (!file.Exists || file.Length > 250_000) continue;
             ProjectCatalog.GuardLinks(candidate.FullPath);
-            var content = File.ReadAllText(candidate.FullPath);
+            var content = SensitiveDataPolicy.Redact(File.ReadAllText(candidate.FullPath));
             if (content.Length > remaining)
                 content = content[..remaining] + "\n[File content truncated by inspection limit.]";
             evidence.Add($"--- {candidate.RelativePath} ---\n{content}");
@@ -153,7 +154,7 @@ public sealed class WorkspaceTools(TwinSettings settings, ProjectCatalog catalog
             segment.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
             segment.Contains("credential", StringComparison.OrdinalIgnoreCase) ||
             segment.EndsWith(".user", StringComparison.OrdinalIgnoreCase));
-        return !sensitivePath && Readable.Contains(Path.GetExtension(path)) &&
+        return !ToolAuthorizationService.IsSensitivePath(path) && !sensitivePath && Readable.Contains(Path.GetExtension(path)) &&
                !name.Contains("secret", StringComparison.OrdinalIgnoreCase) &&
                !name.Contains("credential", StringComparison.OrdinalIgnoreCase) &&
                !name.EndsWith(".user", StringComparison.OrdinalIgnoreCase);

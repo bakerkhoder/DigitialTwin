@@ -10,3 +10,5 @@ Quick demonstration:
 5. For the web-search demo, separately configure Tavily or Brave as documented in `docs/TOOL-CATALOG-AND-DEMO.md`.
 
 **Key distinction**: Qdrant retrieves uploaded facts; only deterministic C# services can enforce access control. The policy file is reference data, not security configuration.
+
+For Phase 3, upload `08-adversarial-instructions.txt` separately. It should show **Review required** and stay out of search until reviewed. Its instructions remain untrusted even after review; see [the guardrail demo](../docs/GUARDRAILS-AND-POISONING-PREVENTION.md). Security-training documents can trigger this heuristic review flow too.

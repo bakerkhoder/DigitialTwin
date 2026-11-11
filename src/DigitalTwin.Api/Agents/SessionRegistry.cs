@@ -8,6 +8,10 @@ public sealed class SessionRegistry
 {
     private readonly ConcurrentDictionary<string, AgentSession> _sessions = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
+    private readonly ConcurrentDictionary<string, byte> _privateSessions = new();
+    public bool HasPrivateContext(string id) => _privateSessions.ContainsKey(id);
+    public void MarkPrivate(string id) => _privateSessions.TryAdd(id, 0);
+    public void DiscardContext(string id) => _sessions.TryRemove(id, out _);
     /// <summary>
     /// Invalidate cached multi-turn context when a knowledge revision changes. This
     /// prevents the next prompt from reusing already-deleted retrieved passages.
@@ -19,7 +23,7 @@ public sealed class SessionRegistry
     {
         var gate = GetLock(id);
         await gate.WaitAsync(ct);
-        try { _sessions.TryRemove(id, out _); }
+        try { _sessions.TryRemove(id, out _); _privateSessions.TryRemove(id, out _); }
         finally { gate.Release(); }
     }
     public SemaphoreSlim GetLock(string id) => _locks.GetOrAdd(id, _ => new SemaphoreSlim(1, 1));

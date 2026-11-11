@@ -46,7 +46,7 @@ Aspire/OpenTelemetry receives separate `knowledge.retrieve` and `knowledge.reran
 
 Use the library's **Deprecate**, **Restore** and **Delete** buttons. The status API is `PATCH /api/knowledge/documents/{id}/status` with `{"status":"deprecated"}` or `{"status":"active"}`. Backend code assigns the payload status through Qdrant's [set-payload API](https://api.qdrant.tech/api-reference/points/set-payload); uploaded text cannot assign it.
 
-Filtering happens inside Qdrant before candidate selection. The [filter](https://qdrant.tech/documentation/search/filtering/) accepts `status=active` or an empty/missing status. Existing legacy documents therefore remain searchable without an immediate migration. New points carry `status`, `trustLevel=user-uploaded` and an indexing pipeline identifier. This metadata does not implement the later poisoning-review/guardrail phase.
+Filtering happens inside Qdrant before candidate selection. The [filter](https://qdrant.tech/documentation/search/filtering/) accepts `status=active` or an empty/missing status. Existing legacy documents therefore remain searchable without an immediate migration. New points carry `status`, `trustLevel=user-uploaded` and an indexing pipeline identifier. Phase 3 also adds review-state filtering and guardrails; see [GUARDRAILS-AND-POISONING-PREVENTION.md](GUARDRAILS-AND-POISONING-PREVENTION.md).
 
 Re-uploading the same filename replaces that document. Unchanged extracted text with the same indexing pipeline and complete expected point set returns `unchanged=true` without embedding, upserting or resetting chat sessions. Changing the embedding model or chunking version causes re-indexing. Existing points without a pipeline identifier are re-indexed once on their next upload; no bulk re-index runs at startup. Re-uploading a deprecated document preserves its status until explicitly restored.
 
@@ -131,4 +131,4 @@ Both temporary collections were deleted and confirmed absent. The existing `deve
 
 ## Follow-up scope
 
-Dedicated guardrail middleware, poisoning review/quarantine, SQLite conversation/session persistence, explicit long-term memory, full agent-registration extraction and advanced multi-agent/A2A orchestration remain for later phases.
+Phase 3 guardrail middleware and poisoning review/quarantine are now implemented; see [the Phase 3 guide](GUARDRAILS-AND-POISONING-PREVENTION.md). SQLite conversation/session persistence, explicit long-term memory, full agent-registration extraction and advanced multi-agent/A2A orchestration remain for later phases.
