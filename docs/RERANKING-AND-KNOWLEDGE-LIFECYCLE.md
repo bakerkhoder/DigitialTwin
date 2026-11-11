@@ -87,6 +87,16 @@ Remove-Item Env:TWIN_RUN_LIVE_RERANK_EVAL
 
 `TWIN_EVAL_MODEL` optionally selects another already installed local model. The fixture has ten passages and three known-answer questions. It requires each expected source to rank in the top three and reports vector rank, final rank, score and latency. This small fixture is a regression check, not a broad quality benchmark; it evaluates reranking of fixed candidates independently of embedding recall.
 
+For live Qdrant integration, run the separate opt-in tests against Qdrant on `127.0.0.1:6333` and Ollama on `127.0.0.1:11434`:
+
+```powershell
+$env:TWIN_RUN_LIVE_QDRANT_TESTS = '1'
+dotnet test tests/DigitalTwin.Api.Tests --artifacts-path data/live-qdrant-verification -p:UseAppHost=false --filter 'Category=LiveQdrant' --logger 'console;verbosity=detailed'
+Remove-Item Env:TWIN_RUN_LIVE_QDRANT_TESTS
+```
+
+Each test creates a unique `developertwin-test-{guid}` collection and deletes it in cleanup, including a check that the collection is gone. The configured `developer_knowledge` collection is not used. These tests exercise actual embedding generation, Qdrant vector retrieval and payload filtering, structured reranking, unchanged-upload request counts, replacement, deprecation/restoration, and deletion. A second scenario seeds 205 legacy points to verify scrolling and lifecycle mutations across multiple pages. Separate build artifacts avoid replacing the executable when the development API is running. The normal test run skips these live tests.
+
 For the complete live demo, start Docker Desktop, then `docker compose up -d`, and run the existing backend and frontend scripts. Upload a small policy, search, compare candidate ranks, upload it again to see **Unchanged**, deprecate it to remove it from search, restore it, then delete it. Upload a searchable PDF with external analysis off to verify local extraction. Use a separate test collection for repeatable experiments.
 
 ### Results on November 11, 2026
@@ -99,9 +109,25 @@ Backend/test builds and the TypeScript/Vite production build passed. The regress
 | Scanned PDF consent | 8 | 1 | 3.6 s |
 | Unchanged embedding reuse | 7 | 1 | 3.6 s |
 
-The initial 45-second cold-model attempt timed out. The configured budget is now 90 seconds and failures still fall back to vector order. The smaller installed `llama3.2:1b` failed the scanned-PDF relevance check, so it was not selected as the default. No new model was downloaded. Live Qdrant ingestion/filtering remains unverified because Docker Desktop's engine was stopped; HTTP contract and lifecycle route tests passed against the fixture. Browser interaction and a live OpenRouter OCR request were not tested.
+The initial 45-second cold-model attempt timed out. The configured budget is now 90 seconds and failures still fall back to vector order. The smaller installed `llama3.2:1b` failed the scanned-PDF relevance check, so it was not selected as the default. No new model was downloaded. Docker Desktop was stopped during the initial implementation; the live Qdrant follow-up below resolves that verification gap. Browser interaction and a live OpenRouter OCR request were not tested.
 
 An isolated API smoke run with `dotnet run --project src/DigitalTwin.Api --no-build --no-restore --no-launch-profile --urls http://127.0.0.1:5097` started successfully. `/api/status` returned the configured local providers, and invalid agent/search requests returned HTTP 400. This verified MAF tool dependency resolution without submitting a chat to a model. The smoke server was stopped afterward.
+
+### Live Qdrant follow-up on November 11, 2026
+
+Both `LiveKnowledgeIntegrationTests` passed against the running local Qdrant and existing Ollama models in about 65 seconds. A subsequent regression run passed all 36 offline tests, with the three opt-in live tests skipped as intended. All three live questions retrieved ten candidates and returned five reranked hits without fallback:
+
+| Expected source | Live vector rank | Final rank | Vector similarity | Retrieval + reranking |
+| --- | --- | --- | --- | --- |
+| Project access rules | 1 | 1 | 0.815 | 23.1 s |
+| Scanned PDF consent | 1 | 1 | 0.779 | 7.6 s |
+| Unchanged embedding reuse | 1 | 1 | 0.844 | 3.4 s |
+
+These live questions already placed the expected source first in vector retrieval; reranking preserved that order. They verify integration rather than demonstrate additional ranking improvement beyond the earlier fixed-candidate evaluation.
+
+The live checks also confirmed that unchanged uploads send zero embedding/upsert requests; deprecation excludes a document while preserving its vectors; unchanged and changed re-uploads preserve deprecated status; restoration exposes the new revision; deletion removes its points; and a shorter replacement removes obsolete chunks. All 205 legacy points were listed across scroll pages and correctly deprecated, restored and deleted while preserving another source.
+
+Both temporary collections were deleted and confirmed absent. The existing `developer_knowledge` collection retained its three points. The already running API remained running; its `/api/knowledge/health` endpoint reported both services reachable. Tests built into `data/live-qdrant-verification` to avoid locked development executables. NuGet vulnerability-feed lookup was unavailable during restore; the installed dependencies still restored and compiled successfully. No production source or model configuration needed changes.
 
 ## Follow-up scope
 

@@ -58,3 +58,12 @@
 - Initial cold qwen3:8b evaluation exceeded 45 seconds, so the bounded configurable timeout is now 90 seconds. The installed llama3.2:1b failed the relevance fixture and was not selected. No additional model download or paid model API was introduced.
 - Docker's Linux engine was stopped and port 6333 was unavailable. Live Qdrant integration, browser interaction and hosted OCR were not claimed as verified. See [RERANKING-AND-KNOWLEDGE-LIFECYCLE.md](RERANKING-AND-KNOWLEDGE-LIFECYCLE.md) for API details, migration behavior, exact commands and limitations.
 - Scope agreed with the user: first two phases only. Persistent memory, full guardrail/poisoning review, broader agent-registration refactoring and A2A are deferred.
+
+## 2026-11-11 — live Qdrant verification
+
+- Added two opt-in `LiveKnowledgeIntegrationTests` using generated `developertwin-test-{guid}` collections and real `nomic-embed-text` embeddings plus local `qwen3:8b` scoring. Both tests passed; all three evaluation questions retained the correct passage at rank 1 after real vector retrieval and reranking, without fallback.
+- Verified unchanged uploads make zero embedding/upsert requests; deprecate/restore filtering; status preservation on re-upload; revision replacement; obsolete-chunk removal; and hard deletion. Verified scrolling and lifecycle mutations for 205 legacy points with no status metadata.
+- Both test collections were deleted and confirmed absent. The existing `developer_knowledge` collection remained at three points. The user's running API was left running, and `/api/knowledge/health` reported Qdrant and Ollama reachable.
+- Command: `$env:TWIN_RUN_LIVE_QDRANT_TESTS = '1'; dotnet test tests/DigitalTwin.Api.Tests --artifacts-path data/live-qdrant-verification -p:UseAppHost=false --filter 'Category=LiveQdrant' --logger 'console;verbosity=detailed'`. Separate build output avoids replacing the locked executable of the running development API. Restore used installed dependencies; the NuGet vulnerability-feed lookup was unavailable.
+- Next planned phase remains guardrails and poisoning prevention, followed by durable sessions/memory and agent composition cleanup. This follow-up added verification only; those later phases have not been implemented.
+- The subsequent default regression run passed 36 tests and skipped the three opt-in live tests as intended. No frontend or production-code changes required another frontend build.
